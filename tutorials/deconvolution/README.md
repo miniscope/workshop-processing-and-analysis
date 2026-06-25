@@ -9,23 +9,25 @@ calcium traces into a per-unit estimate of neural activity. Provided by `calab`
 
 ## Just exploring? (no data needed)
 
-Both apps are hosted and can generate their own simulated data in-browser — open
-them directly for a zero-setup look:
+Both apps are hosted and generate their own simulated data **in the browser**,
+so you can pick the simulation parameters yourself with no recording on hand:
 
 - CaTune: https://miniscope.github.io/CaLab/CaTune/
 - CaDecon: https://miniscope.github.io/CaLab/CaDecon/
 
-Or launch from Python with synthetic traces (uses `calab.simulate()`, so no
-recording is required) — this also keeps the save path working:
+`--demo` just opens those landing pages for you (no session data, no save-back —
+the simulated traces live in the browser):
 
 ```bash
 python tutorials/deconvolution/run_cadecon.py --demo
 python tutorials/deconvolution/run_catune.py --demo
 ```
 
-Either produces the deconvolved output that CaMAP consumes. Because this step is
-explicit, **Minian's own deconvolution is skipped** (see `tutorials/minian/`) —
-calab owns deconvolution here, and CaMAP's built-in OASIS is bypassed.
+The save path (producing the `activity.npy` that CaMAP consumes) is the
+**session** path below, which sends your real Minian traces to the app. Because
+this step is explicit, **Minian's own deconvolution is skipped** (see
+`tutorials/minian/`) — calab owns deconvolution here, and CaMAP's built-in OASIS
+is bypassed.
 
 - **Env:** the shared `.venv`
 
