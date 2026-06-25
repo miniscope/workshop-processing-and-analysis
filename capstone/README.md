@@ -1,7 +1,7 @@
 # Capstone — CaMAP place-cell analysis
 
 Tie it all together: bring in the denoised miniscope traces (Minian), the
-deconvolved spikes (calab: CaTune / CaDecon), and the tracked behavior
+deconvolved neural activity (calab: CaTune / CaDecon), and the tracked behavior
 (eztrack), then walk through combining neuro-behavioral data and analyzing place
 cells with full metrics.
 
@@ -14,7 +14,7 @@ cells with full metrics.
 Runs CaMAP's pipeline **live**, pausing at each step to inspect the intermediate
 artifact and explain it:
 
-`load → preprocess_behavior → (inject deconvolved spikes) → match_events → compute_occupancy → analyze_units → save_bundle`
+`load → preprocess_behavior → (inject deconvolved activity) → match_events → compute_occupancy → analyze_units → save_bundle`
 
 Unlike CaMAP's own `view_results_arena.ipynb` (which only *views* a finished
 bundle), this notebook builds the result from raw upstream outputs. Deconvolution
@@ -24,9 +24,10 @@ happened upstream (calab), so CaMAP's built-in OASIS is bypassed.
 
 - `eztrack_to_dlc.py` — converts eztrack's flat `frame,x,y` CSV into the
   DeepLabCut-style CSV CaMAP reads. **Fully implemented.**
-- `deconv_inject.py` — injects calab's (CaTune/CaDecon) deconvolved spikes into
-  `ds.good_unit_ids` / `ds.S_list`, bypassing CaMAP's OASIS. Injection mechanics
-  are wired; the **output parser is a TODO** pending the calab dev branch.
+- `deconv_inject.py` — injects calab's (CaTune/CaDecon) deconvolved neural
+  activity into `ds.good_unit_ids` / `ds.S_list`, bypassing CaMAP's OASIS.
+  Injection mechanics are wired; the **output parser is a TODO** pending the
+  calab dev branch.
 
 Both live in [`workshop_glue/`](workshop_glue/) and are imported by the notebook.
 

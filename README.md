@@ -12,10 +12,10 @@ their own repos (linked below) — we pin and reference them rather than copy th
 ## Pipeline at a glance
 
 ```
-raw miniscope video ─▶ Minian ─▶ C / C_lp (denoised) ─▶ CaTune/CaDecon ─▶ spikes ─┐
-                                 A.zarr / max_proj.zarr ──────────────────────────┤
-                                                                                   ├─▶ CaMAP ─▶ place cells
-raw behavior video  ─▶ eztrack ─▶ position.csv ────────────────────────────────────┘   (capstone)
+raw miniscope video ─▶ Minian ─▶ C / C_lp (denoised) ─▶ CaTune/CaDecon ─▶ activity ─┐
+                                 A.zarr / max_proj.zarr ────────────────────────────┤
+                                                                                     ├─▶ CaMAP ─▶ place cells
+raw behavior video  ─▶ eztrack ─▶ position.csv ──────────────────────────────────────┘   (capstone)
 
 minisim: simulate recordings to understand the upstream signal
 Deconvolution is an explicit stage (calab) — Minian's own deconvolution is skipped.

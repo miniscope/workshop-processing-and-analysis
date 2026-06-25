@@ -1,7 +1,7 @@
 # Deconvolution (calab: CaTune / CaDecon)
 
 The explicit middle stage of the pipeline: deconvolve the Minian-denoised
-calcium traces into event/spike trains. Provided by `calab`
+calcium traces into a per-unit estimate of neural activity. Provided by `calab`
 (`pip install calab`), which ships two tools:
 
 - **CaTune** — interactive training/tuning web interface
@@ -26,14 +26,14 @@ conda activate workshop
 | | path |
 |---|---|
 | in | `data/example_session/minian_out/` (Minian denoised traces `C` / `C_lp`) |
-| out | `data/example_session/deconv_out/` (deconvolved spikes) |
+| out | `data/example_session/deconv_out/` (deconvolved neural activity) |
 
 ## How this feeds the capstone
 
 The capstone glue (`capstone/workshop_glue/deconv_inject.py`,
-`inject_deconv_spikes`) loads the deconvolved spikes and sets
-`ds.good_unit_ids` / `ds.S_list` directly, bypassing CaMAP's OASIS. Each spike
-train must match the neural frame count.
+`inject_deconv_activity`) loads the deconvolved neural activity and sets
+`ds.good_unit_ids` / `ds.S_list` directly, bypassing CaMAP's OASIS. Each
+activity trace must match the neural frame count.
 
 (If you instead deconvolve *inside* CaMAP, drop tuned OASIS params into the
 analysis config's `neural.oasis` block and call `ds.deconvolve()` — but that's
