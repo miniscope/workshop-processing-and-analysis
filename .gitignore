@@ -1,0 +1,21 @@
+# Data: never commit raw recordings or large intermediates.
+# Golden checkpoints are fetched by scripts/download_data.py, not committed.
+data/example_session/
+data/checkpoints/*
+!data/checkpoints/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

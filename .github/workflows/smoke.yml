@@ -1,0 +1,32 @@
+name: capstone-smoke
+
+# Runs the capstone notebook headless against the golden checkpoints, so a
+# broken install or an upstream API drift is caught in CI rather than in front
+# of the workshop room.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: environment.yml
+          activate-environment: workshop
+
+      - name: Fetch example data + checkpoints
+        run: python scripts/download_data.py
+
+      - name: Execute capstone notebook
+        run: |
+          jupyter nbconvert --to notebook --execute --inplace \
+            capstone/camap_placecells.ipynb
