@@ -33,14 +33,17 @@ Both live in [`workshop_glue/`](workshop_glue/) and are imported by the notebook
 
 ## Inputs
 
+All under the active session, `data/sessions/<session>/` (default `prerecorded`):
+
 | source | path |
 |---|---|
-| Minian | `data/example_session/minian_out/` (or `data/checkpoints/minian_out/`) |
-| deconvolution | `data/example_session/deconv_out/` (calab: CaTune/CaDecon) |
-| eztrack | `data/example_session/eztrack_out/` |
-| timestamps | `data/example_session/timestamps/` |
+| Minian | `minian_out/` |
+| deconvolution | `deconv_out/` (calab: CaTune/CaDecon) |
+| eztrack | `eztrack_out/` |
+| timestamps | `raw/` (`neural_timestamp.csv`, `behavior_timestamp.csv`) |
 
-Point at `checkpoints/` if your own upstream runs didn't complete.
+These are populated either by your own upstream runs or by
+`python scripts/get_data.py` (local-first — see `data/README.md`).
 
 ## TODO
 - [ ] Fill real paths once the example data is uploaded.

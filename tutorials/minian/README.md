@@ -34,8 +34,8 @@ its own example session (see `data/README.md`).
 
 | | path |
 |---|---|
-| in | `data/example_session/raw/` (miniscope video) |
-| out | `data/example_session/minian_out/` → `C.zarr` (and/or `C_lp.zarr`), `A.zarr`, `max_proj.zarr` |
+| in | `data/sessions/<session>/raw/` (miniscope video) |
+| out | `data/sessions/<session>/minian_out/` → `C.zarr` (and/or `C_lp.zarr`), `A.zarr`, `max_proj.zarr` |
 
 These zarr stores are exactly what CaMAP reads in the capstone (dims `(unit_id, frame)`).
 The denoised `C` / `C_lp` traces also feed the deconvolution stage.

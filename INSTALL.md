@@ -33,7 +33,7 @@ python -m pip install -r requirements.txt          # newest from PyPI
 # python -m pip install -r requirements.lock
 
 python -m ipykernel install --user --name workshop --display-name "Workshop"
-python scripts/download_data.py                    # example data + golden checkpoints
+python scripts/get_data.py                         # prerecorded session data (all stages)
 ```
 
 ## newest vs. pinned
@@ -46,7 +46,7 @@ python scripts/download_data.py                    # example data + golden check
 
 ## Verify the capstone runs
 
-On the golden checkpoints, headless (same as CI — see `.github/workflows/smoke.yml`):
+On the prerecorded session data, headless (same as CI — see `.github/workflows/smoke.yml`):
 
 ```bash
 jupyter nbconvert --to notebook --execute --inplace \

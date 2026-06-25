@@ -1,6 +1,6 @@
 name: capstone-smoke
 
-# Runs the capstone notebook headless against the golden checkpoints, so a
+# Runs the capstone notebook headless against the prerecorded session data, so a
 # broken install or an upstream API drift is caught in CI rather than in front
 # of the workshop room.
 
@@ -29,8 +29,8 @@ jobs:
           # swap to the pinned set once development locks in:
           # python -m pip install -r requirements.lock
 
-      - name: Fetch example data + checkpoints
-        run: python scripts/download_data.py
+      - name: Fetch prerecorded session data
+        run: python scripts/get_data.py --session prerecorded
 
       - name: Execute capstone notebook
         run: |

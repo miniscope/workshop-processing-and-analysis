@@ -21,29 +21,50 @@ minisim: simulate recordings to understand the upstream signal
 Deconvolution is an explicit stage (calab) — Minian's own deconvolution is skipped.
 ```
 
-## Modules
+## Agenda
 
-| Tool | What it does | Materials |
-|------|--------------|-----------|
-| **minisim** | simulate miniscope recordings | [`tutorials/minisim/`](tutorials/minisim/) — notebooks (linked) |
-| **Minian** | CNMF processing → denoised traces & footprints (deconv skipped) | [`tutorials/minian/`](tutorials/minian/) — walkthrough (linked) |
-| **CaTune / CaDecon** (`pip install calab`) | explicit deconvolution stage | [`tutorials/deconvolution/`](tutorials/deconvolution/) |
-| **eztrack** (fork) | behavioral tracking | [`tutorials/eztrack/`](tutorials/eztrack/) — notebook (linked) |
-| **CaMAP capstone** | combine neuro + behavior, place cells | [`capstone/`](capstone/) |
+The workshop runs in order — each step builds on the previous one — and ends
+with the capstone that ties everything together. Everything shares one
+environment, so a step can also be run standalone against downloaded data.
 
-The modules build on each other (simulate → process → deconvolve → track →
-combine), but everything shares one environment, so order is flexible. See each
-module's README for which notebook to run and what it produces.
+| # | Module | Consumes | Produces | Materials |
+|---|--------|----------|----------|-----------|
+| 1 | **minisim** — simulate recordings | (code) | simulated recording (optional) | [`tutorials/minisim/`](tutorials/minisim/) |
+| 2 | **Minian** — CNMF processing | raw miniscope video | denoised traces `C`/`C_lp`, `A`, `max_proj` | [`tutorials/minian/`](tutorials/minian/) |
+| 3 | **CaTune / CaDecon** — deconvolution | Minian denoised traces | deconvolved neural activity | [`tutorials/deconvolution/`](tutorials/deconvolution/) |
+| 4 | **eztrack** — behavioral tracking | raw behavior video | position CSV | [`tutorials/eztrack/`](tutorials/eztrack/) |
+| 5 | **CaMAP** — capstone, place cells | Minian + deconv + eztrack + timestamps | `.camap` bundle, place-cell metrics | [`capstone/`](capstone/) |
+
+Steps 1 (minisim) and 4 (eztrack) are independent of the neural processing
+chain (2→3); the capstone (5) needs the outputs of 2, 3, and 4.
 
 ## The data story
 
-One canonical example session flows through every day. Each stage writes its
-output into a shared `data/` tree, and we ship **golden checkpoints** of every
-intermediate. So the capstone — and any attendee whose earlier run broke —
-can always start from known-good inputs. The capstone reads *files*, so it
-doesn't care whether they came from your own run or the golden copy.
+Data is organized into named **sessions** under `data/sessions/<name>/`, each
+holding the raw recording and every processed stage:
 
-See [`data/README.md`](data/README.md) for download links and layout.
+```
+data/sessions/<name>/
+├── raw/         miniscope video, behavior video, neural + behavior timestamps
+├── minian_out/  Minian output  (C/C_lp, A, max_proj)        — step 2
+├── deconv_out/  calab output   (deconvolved neural activity) — step 3
+└── eztrack_out/ eztrack output (position CSV)                — step 4
+```
+
+Two sessions:
+- **`prerecorded`** — the backup dataset, always available on Zenodo.
+- **`live`** — recorded during the workshop, downloaded if that pans out.
+
+**Raw** (videos + timestamps) feeds Minian (step 2) and eztrack (step 4).
+**Processed** stages feed calab (step 3) and CaMAP (step 5) — and those inputs
+can be either *your own local output* from the upstream steps **or** the
+processed bundles **on Zenodo**. `scripts/get_data.py` resolves this
+**local-first**: each stage you already produced is kept, and only the missing
+stages are pulled from Zenodo (via `pooch`, checksummed + cached, the same way
+Minian fetches data). So whether you ran the upstream step or not, the capstone
+reads the same path.
+
+See [`data/README.md`](data/README.md) for the download commands and layout.
 
 ## Quick start
 
@@ -56,8 +77,8 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Act
 python -m pip install -r requirements.txt           # see INSTALL.md for the pinned lock
 # pull each tool's teaching notebooks into tutorials/<tool>/notebooks/
 python scripts/fetch_notebooks.py
-# fetch the example data + golden checkpoints
-python scripts/download_data.py
+# fetch the workshop data (default: the prerecorded backup session, all stages)
+python scripts/get_data.py
 ```
 
 Each tool ships its teaching notebooks inside its package; `fetch_notebooks.py`
@@ -75,9 +96,11 @@ workshop-processing-and-analysis/
 ├── requirements.txt          # top-level deps (newest from PyPI)
 ├── requirements.lock         # full pinned freeze (verified-working set)
 ├── data/
-│   ├── README.md             # download links + checksums
-│   └── checkpoints/          # golden intermediate outputs (one per stage)
-├── scripts/download_data.py
+│   ├── README.md             # sessions, Zenodo bundles, local-first resolution
+│   └── sessions/             # data/sessions/<name>/{raw,minian_out,deconv_out,eztrack_out}
+├── scripts/
+│   ├── get_data.py           # pooch-based Zenodo fetch (per session, local-first)
+│   └── fetch_notebooks.py    # copy each tool's bundled notebooks into tutorials/
 ├── tutorials/                # one folder per upstream tool (links + run notes)
 │   ├── minisim/
 │   ├── minian/

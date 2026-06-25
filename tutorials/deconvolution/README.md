@@ -30,8 +30,8 @@ calab ships **no notebooks** (it's a web UI / CLI), so it's not part of
 
 | | path |
 |---|---|
-| in | `data/example_session/minian_out/` (Minian denoised traces `C` / `C_lp`) |
-| out | `data/example_session/deconv_out/` (deconvolved neural activity) |
+| in | `data/sessions/<session>/minian_out/` (Minian denoised traces `C` / `C_lp`) |
+| out | `data/sessions/<session>/deconv_out/` (deconvolved neural activity) |
 
 ## How this feeds the capstone
 

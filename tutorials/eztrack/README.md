@@ -25,8 +25,8 @@ Bundled: `LocationTracking_Individual` (single video) and
 
 | | path |
 |---|---|
-| in | `data/example_session/raw/` (behavior video) |
-| out | `data/example_session/eztrack_out/` (position CSV: `frame, x, y, detected, distance_px, ...`) |
+| in | `data/sessions/<session>/raw/` (behavior video) |
+| out | `data/sessions/<session>/eztrack_out/` (position CSV: `frame, x, y, detected, distance_px, ...`) |
 
 ## How this feeds the capstone
 

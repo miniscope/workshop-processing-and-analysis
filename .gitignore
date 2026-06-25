@@ -1,8 +1,6 @@
-# Data: never commit raw recordings or large intermediates.
-# Golden checkpoints are fetched by scripts/download_data.py, not committed.
-data/example_session/
-data/checkpoints/*
-!data/checkpoints/.gitkeep
+# Data: never commit recordings or intermediates — fetched by scripts/get_data.py.
+data/sessions/
+data/.cache/
 
 # Python
 __pycache__/
