@@ -16,8 +16,8 @@ This populates:
 data/
 ├── example_session/
 │   ├── raw/                  # raw miniscope + behavior video
-│   ├── minian_out/           # C.zarr, A.zarr, max_proj.zarr        (Minian output)
-│   ├── catune_out/           # deconvolved spikes / tuned params     (CaTune output)
+│   ├── minian_out/           # C/C_lp, A.zarr, max_proj.zarr        (Minian output)
+│   ├── deconv_out/           # deconvolved spikes                    (calab: CaTune/CaDecon)
 │   ├── eztrack_out/          # behavior position CSV                 (eztrack output)
 │   └── timestamps/           # neural + behavior timeStamps.csv (from the DAQ)
 └── checkpoints/              # GOLDEN copies of each stage above

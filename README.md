@@ -12,11 +12,13 @@ their own repos (linked below) — we pin and reference them rather than copy th
 ## Pipeline at a glance
 
 ```
-raw miniscope video ──▶ Minian ──▶ C.zarr / A.zarr / max_proj.zarr ─┐
-                                                                     ├─▶ CaMAP ─▶ place cells
-raw behavior video  ──▶ eztrack ─▶ position.csv ────────────────────┤   (capstone)
-                        CaTune  ─▶ deconvolved spikes / params ──────┘
+raw miniscope video ─▶ Minian ─▶ C / C_lp (denoised) ─▶ CaTune/CaDecon ─▶ spikes ─┐
+                                 A.zarr / max_proj.zarr ──────────────────────────┤
+                                                                                   ├─▶ CaMAP ─▶ place cells
+raw behavior video  ─▶ eztrack ─▶ position.csv ────────────────────────────────────┘   (capstone)
+
 minisim: simulate recordings to understand the upstream signal
+Deconvolution is an explicit stage (calab) — Minian's own deconvolution is skipped.
 ```
 
 ## Modules
@@ -24,8 +26,8 @@ minisim: simulate recordings to understand the upstream signal
 | Tool | What it does | Materials |
 |------|--------------|-----------|
 | **minisim** | simulate miniscope recordings | [`tutorials/minisim/`](tutorials/minisim/) — notebooks (linked) |
-| **Minian** | CNMF processing → traces & footprints | [`tutorials/minian/`](tutorials/minian/) — walkthrough (linked) |
-| **CaTune** (`pip install calab`) | deconvolution | [`tutorials/catune/`](tutorials/catune/) — training web interface |
+| **Minian** | CNMF processing → denoised traces & footprints (deconv skipped) | [`tutorials/minian/`](tutorials/minian/) — walkthrough (linked) |
+| **CaTune / CaDecon** (`pip install calab`) | explicit deconvolution stage | [`tutorials/deconvolution/`](tutorials/deconvolution/) |
 | **eztrack** (fork) | behavioral tracking | [`tutorials/eztrack/`](tutorials/eztrack/) — notebook (linked) |
 | **CaMAP capstone** | combine neuro + behavior, place cells | [`capstone/`](capstone/) |
 
@@ -72,7 +74,7 @@ workshop-processing-and-analysis/
 ├── tutorials/                # one folder per upstream tool (links + run notes)
 │   ├── minisim/
 │   ├── minian/
-│   ├── catune/
+│   ├── deconvolution/        # calab: CaTune / CaDecon
 │   └── eztrack/
 ├── capstone/                 # the CaMAP integration notebook + glue
 └── .github/workflows/smoke.yml   # runs the capstone headless on checkpoint data

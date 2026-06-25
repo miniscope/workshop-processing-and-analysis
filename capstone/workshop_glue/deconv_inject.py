@@ -1,16 +1,18 @@
-"""Inject CaTune deconvolution output into a CaMAP dataset.
+"""Inject external deconvolution output (calab: CaTune / CaDecon) into CaMAP.
 
-CaMAP normally runs its own OASIS deconvolution in ``ds.deconvolve()``, which
-populates ``ds.good_unit_ids`` and ``ds.S_list`` for ``match_events()`` to
-consume. To use CaTune's deconvolution instead, we skip ``deconvolve()`` and set
-those two attributes directly.
+In this workshop, deconvolution is an explicit middle stage: Minian traces are
+deconvolved by CaTune or CaDecon (both in ``calab``), and the result is fed to
+CaMAP. CaMAP normally runs its own OASIS deconvolution in ``ds.deconvolve()``,
+which populates ``ds.good_unit_ids`` and ``ds.S_list`` for ``match_events()`` to
+consume. To use the external deconvolution instead, we skip ``deconvolve()`` and
+set those two attributes directly.
 
 Contract enforced by CaMAP (``camap.dataset.arena.match_events``):
   * ``ds.S_list[i]`` is the 1-D spike train for unit ``ds.good_unit_ids[i]``
     (order matters — the two lists are zipped).
   * each spike train length must equal the number of neural timestamps.
 
-The CaTune output *parser* is a TODO pending the CaMAP CaTune-integration dev
+The calab output *parser* is a TODO pending the calab/CaMAP integration dev
 branch; only the injection mechanics + validation are final here.
 """
 
@@ -22,11 +24,11 @@ from typing import Any
 import numpy as np
 
 
-def inject_catune_spikes(
+def inject_deconv_spikes(
     ds: Any,
-    catune_output: str | Path,
+    deconv_output: str | Path,
 ) -> None:
-    """Load CaTune spikes and inject them into ``ds`` in place of OASIS.
+    """Load external deconvolved spikes and inject them into ``ds`` (no OASIS).
 
     Call after ``ds.load()`` and before ``ds.match_events()``; do **not** call
     ``ds.deconvolve()``.
@@ -35,12 +37,12 @@ def inject_catune_spikes(
     ----------
     ds:
         A loaded CaMAP dataset (``ds.traces`` populated).
-    catune_output:
-        Path to the CaTune deconvolution output.
+    deconv_output:
+        Path to the deconvolution output (calab: CaTune / CaDecon).
     """
-    catune_output = Path(catune_output)
+    deconv_output = Path(deconv_output)
 
-    unit_ids, s_list = _parse_catune_output(catune_output)
+    unit_ids, s_list = _parse_deconv_output(deconv_output)
 
     if len(unit_ids) != len(s_list):
         raise ValueError(
@@ -60,14 +62,14 @@ def inject_catune_spikes(
     ds.S_list = [np.asarray(s, dtype=float) for s in s_list]
 
 
-def _parse_catune_output(path: Path) -> tuple[list[int], list[np.ndarray]]:
-    """Parse the CaTune output into ``(unit_ids, spike_trains)``.
+def _parse_deconv_output(path: Path) -> tuple[list[int], list[np.ndarray]]:
+    """Parse the calab (CaTune / CaDecon) output into ``(unit_ids, spike_trains)``.
 
-    TODO: implement against the CaTune dev-branch format. Likely a zarr/npz with
+    TODO: implement against the calab dev-branch format. Likely a zarr/npz with
     a spikes array shaped ``(unit, frame)`` plus a ``unit_id`` coordinate. Until
     then this raises so the failure is loud rather than silent.
     """
     raise NotImplementedError(
-        "CaTune output parsing not implemented yet — wire this up against the "
-        f"CaTune dev-branch format once available (input was: {path})."
+        "calab (CaTune/CaDecon) output parsing not implemented yet — wire this "
+        f"up against the dev-branch format once available (input was: {path})."
     )

@@ -29,7 +29,7 @@ def eztrack_to_dlc(
     Parameters
     ----------
     eztrack_csv:
-        Path to the eztrack output CSV (flat columns, e.g. ``Frame, X, Y``).
+        Path to the eztrack output CSV (flat columns, e.g. ``frame, x, y``).
     output_csv:
         Destination DLC-style CSV path.
     bodypart:

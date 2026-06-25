@@ -28,7 +28,7 @@ dependencies:
   - pip:
       - minisim       # simulate miniscope recordings
       - minian        # CNMF processing -> traces & footprints
-      - calab         # CaTune: brings up the training web interface
+      - calab         # CaTune (tuning UI) + CaDecon (deconvolution)
       - camap         # capstone: place-cell analysis
       # eztrack fork: packaged v2.x (pip-installable, ships its notebooks)
       - "eztrack @ git+https://github.com/daharoni/ezTrack"
