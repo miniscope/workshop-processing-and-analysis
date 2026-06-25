@@ -8,10 +8,10 @@
 #   - Python 3.11-3.13
 #   - ffmpeg (system binary)
 
-minisim          # simulate miniscope recordings
-minian           # CNMF processing -> denoised traces & footprints
-calab            # CaTune (tuning UI) + CaDecon (deconvolution)
-camap            # capstone: place-cell analysis
+minisim[notebook]  # simulate miniscope recordings (+ notebook deps: mediapy, etc.)
+minian             # CNMF processing -> denoised traces & footprints
+calab              # CaTune (tuning UI) + CaDecon (deconvolution)
+camap[notebook]    # capstone: place-cell analysis (+ notebook deps)
 
 # eztrack fork: pure-Python, cross-platform; built from git (not published to PyPI)
 eztrack @ git+https://github.com/daharoni/ezTrack

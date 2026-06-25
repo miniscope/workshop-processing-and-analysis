@@ -21,7 +21,7 @@ beautifulsoup4==4.15.0
 bleach==6.4.0
 bokeh==3.9.1
 calab==0.2.3
-camap==0.1.4
+camap==0.1.6
 certifi==2026.6.17
 cffi==2.0.0
 cftime==1.6.5
@@ -93,6 +93,7 @@ matplotlib-inline==0.2.2
 matplotlib==3.11.0
 mdit-py-plugins==0.6.1
 mdurl==0.1.2
+mediapy==1.2.6
 minian==2.0.0
 minisim==1.0.3
 mistune==3.3.2
