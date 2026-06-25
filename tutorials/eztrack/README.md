@@ -3,10 +3,23 @@
 Behavioral tracking: extract the animal's position from the behavior video.
 
 - **Env:** the shared `.venv`
-- **Materials:** the tracking notebook in the [eztrack fork](https://github.com/daharoni/ezTrack)
+- **Source:** the [eztrack fork](https://github.com/daharoni/ezTrack) (`eztrack` v2.x; pure-Python, ships its notebooks)
 
-The `workshop` env installs the fork (`eztrack` v2.x, pip-installable, ships its
-notebooks) via `pip install git+https://github.com/daharoni/ezTrack`.
+Installed from the fork via `pip install git+https://github.com/daharoni/ezTrack`
+(already in `requirements.txt`).
+
+## Get the notebooks
+
+`scripts/fetch_notebooks.py` copies eztrack's bundled notebooks into
+`tutorials/eztrack/notebooks/`. To (re)fetch just eztrack:
+
+```bash
+eztrack notebooks list                                 # see what's available
+eztrack notebooks copy --all -o tutorials/eztrack/notebooks
+```
+
+Bundled: `LocationTracking_Individual` (single video) and
+`LocationTracking_BatchProcess` (many videos).
 
 ## Inputs / outputs
 

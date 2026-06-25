@@ -1,18 +1,43 @@
 # minisim
 
-Simulate miniscope recordings to build intuition for what the upstream signal
-looks like before any processing.
+Simulate miniscope recordings to build intuition for the upstream signal before
+any processing — and generate simulated data you can carry through the rest of
+the workshop.
 
 - **Env:** the shared `.venv`
-- **Materials:** teaching notebooks in the [minisim repo](https://github.com/miniscope/minisim) <!-- TODO: confirm URL + pin ref -->
+- **Source:** [minisim](https://github.com/miniscope/minisim) (notebooks ship inside the package)
 
-## Run
+## Get the notebooks
+
+`scripts/fetch_notebooks.py` (run once from the repo root) copies minisim's
+bundled notebooks into `tutorials/minisim/notebooks/`. To (re)fetch just minisim:
 
 ```bash
-source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
-# open the minisim teaching notebooks (from the installed package / cloned repo)
+minisim-notebooks list                                   # see what's available
+minisim-notebooks copy --all -o tutorials/minisim/notebooks -f
 ```
 
+Then open them:
+
+```bash
+jupyter lab    # navigate to tutorials/minisim/notebooks/
+```
+
+## What's bundled
+
+Two categories ship side by side:
+
+**`training/`** — the teaching ladder (each notebook isolates one effect to *explain* it):
+- `01_anatomy` — anatomy of a simulated recording
+- `02_demixing` — source demixing
+- `03_metrics` — quality metrics
+
+**`studio/`** — production tools (expose every knob to *make usable simulated data*):
+- `build_recording` — the data generator
+
+> minisim *generates* its recordings from code, so these notebooks need no data
+> download. The `build_recording` studio notebook is a good way to produce a
+> simulated session to practice the downstream tools on.
+
 ## TODO
-- [ ] Link the specific minisim notebooks used, in order.
-- [ ] Note any simulated outputs that feed later modules (if any).
+- [ ] Decide the running order in the agenda (training ladder first, then studio).

@@ -54,9 +54,15 @@ git clone https://github.com/miniscope/workshop-processing-and-analysis.git
 cd workshop-processing-and-analysis
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt           # see INSTALL.md for the pinned lock
+# pull each tool's teaching notebooks into tutorials/<tool>/notebooks/
+python scripts/fetch_notebooks.py
 # fetch the example data + golden checkpoints
 python scripts/download_data.py
 ```
+
+Each tool ships its teaching notebooks inside its package; `fetch_notebooks.py`
+copies them out (version-matched to what's installed) so participants find them
+right next to each module's README. They're regenerated, not committed.
 
 Then open the module you're on under [`tutorials/`](tutorials/) or [`capstone/`](capstone/).
 

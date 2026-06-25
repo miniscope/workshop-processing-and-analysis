@@ -17,9 +17,14 @@ calab owns deconvolution here, and CaMAP's built-in OASIS is bypassed.
 
 ```bash
 source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
-# launch CaTune / run CaDecon from calab
-# TODO: confirm the exact launch command(s) from `calab`
+calab tune        # CaTune — interactive tuning web interface
+calab cadecon     # CaDecon — automated deconvolution web interface
+# calab deconvolve  # batch (headless) deconvolution
+# calab info <file> # inspect a file;  calab convert  # convert to CaLab format
 ```
+
+calab ships **no notebooks** (it's a web UI / CLI), so it's not part of
+`fetch_notebooks.py`.
 
 ## Inputs / outputs
 
@@ -40,5 +45,5 @@ analysis config's `neural.oasis` block and call `ds.deconvolve()` — but that's
 not the path this workshop teaches.)
 
 ## TODO
-- [ ] Confirm the `calab` launch command(s) + where CaTune/CaDecon write output.
+- [ ] Confirm where CaTune/CaDecon write their output for the example session.
 - [ ] Document the exact output format so `deconv_inject.py` can parse it.

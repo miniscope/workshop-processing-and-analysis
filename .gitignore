@@ -15,6 +15,11 @@ dist/
 # Jupyter
 .ipynb_checkpoints/
 
+# Teaching notebooks fetched from the installed tools (version-matched, generated
+# by scripts/fetch_notebooks.py — not vendored). The capstone notebook lives in
+# capstone/ and IS committed.
+tutorials/*/notebooks/
+
 # OS / editor
 .DS_Store
 .vscode/
