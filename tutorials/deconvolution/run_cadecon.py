@@ -1,12 +1,14 @@
 """Bridge Minian traces -> CaDecon (browser, automated) -> deconvolved activity.
 
     python tutorials/deconvolution/run_cadecon.py --session prerecorded
+    python tutorials/deconvolution/run_cadecon.py --demo      # no data needed
 
-Converts Minian's C.zarr to a CaDecon .npy, opens CaDecon (automated
-deconvolution), and on completion writes
-data/sessions/<session>/deconv_out/activity.npy (shape (n_cells, n_frames)) —
-the file the capstone's deconv_inject reads. CaDecon also leaves its native
-`cadecon_activity.npy` + `cadecon_results.json` (kernels, baselines, PVEs).
+With a session, converts Minian's C.zarr to a CaDecon .npy. With ``--demo`` it
+generates synthetic traces via ``calab.simulate()`` instead — handy for just
+bringing up the CaDecon browser interface with no recording on hand. Either way
+it opens CaDecon and, on completion, writes ``activity.npy`` (shape
+``(n_cells, n_frames)``) next to the traces (the session's ``deconv_out/`` for a
+real run, or ``data/.cache/demo_cadecon/`` for ``--demo``).
 
 Thin wrapper over the `calab` CLI (convert / cadecon).
 """
@@ -27,30 +29,53 @@ def run(cmd: list[str]) -> int:
     return subprocess.run(cmd).returncode
 
 
+def demo_traces(work: Path) -> Path:
+    """Generate simulated traces (no session data needed) and save to work/traces.npy."""
+    import calab
+    import numpy as np
+
+    work.mkdir(parents=True, exist_ok=True)
+    npy = work / "traces.npy"
+    print("Generating simulated traces with calab.simulate() ...")
+    np.save(npy, np.ascontiguousarray(calab.simulate().traces, dtype=np.float64))
+    return npy
+
+
+def minian_traces(calab_exe: str, session: str, trace: str, fs: float) -> tuple[Path, Path]:
+    """Convert a session's Minian C.zarr to traces.npy in its deconv_out/."""
+    sess = REPO_ROOT / "data" / "sessions" / session
+    czarr = sess / "minian_out" / f"{trace}.zarr"
+    deconv = sess / "deconv_out"
+    deconv.mkdir(parents=True, exist_ok=True)
+    if not czarr.exists():
+        sys.exit(f"{czarr} not found — run Minian / `python scripts/get_data.py`, or use --demo.")
+    if run([calab_exe, "convert", "-f", "minian", str(czarr), "--fs", str(fs),
+            "-o", str(deconv / "traces")]):
+        sys.exit("convert failed")
+    return deconv / "traces.npy", deconv
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--session", default="prerecorded")
     ap.add_argument("--fs", type=float, default=20.0, help="neural sampling rate (Hz)")
     ap.add_argument("--trace", default="C", help="Minian zarr store name (C or C_lp)")
+    ap.add_argument("--demo", action="store_true",
+                    help="use calab-simulated traces instead of session data")
     args = ap.parse_args()
 
-    calab = shutil.which("calab")
-    if calab is None:
+    calab_exe = shutil.which("calab")
+    if calab_exe is None:
         sys.exit("calab not found — activate the workshop venv (pip install calab).")
 
-    sess = REPO_ROOT / "data" / "sessions" / args.session
-    czarr = sess / "minian_out" / f"{args.trace}.zarr"
-    deconv = sess / "deconv_out"
-    deconv.mkdir(parents=True, exist_ok=True)
-    traces_npy = deconv / "traces.npy"
+    if args.demo:
+        deconv = REPO_ROOT / "data" / ".cache" / "demo_cadecon"
+        traces_npy = demo_traces(deconv)
+    else:
+        traces_npy, deconv = minian_traces(calab_exe, args.session, args.trace, args.fs)
 
-    if not czarr.exists():
-        sys.exit(f"{czarr} not found — run Minian or `python scripts/get_data.py` first.")
-    if run([calab, "convert", "-f", "minian", str(czarr), "--fs", str(args.fs),
-            "-o", str(deconv / "traces")]):
-        return 1
     # CaDecon writes {stem}_activity.npy + {stem}_results.json
-    if run([calab, "cadecon", str(traces_npy), "--fs", str(args.fs),
+    if run([calab_exe, "cadecon", str(traces_npy), "--fs", str(args.fs),
             "-o", str(deconv / "cadecon")]):
         return 1
 
