@@ -1,0 +1,38 @@
+# CaMAP analysis config for the workshop capstone (2D open-field / arena).
+#
+# Analysis parameters only — data paths live in data_paths.yaml. Tune the
+# spatial-map settings to the example session as needed.
+
+neural:
+  fps: 20.0                 # neural (miniscope) sampling rate, Hz — match the recording
+  trace_name: C             # Minian denoised-trace variable in minian_out/ (use C_lp if exported)
+  # OASIS block is REQUIRED by CaMAP's schema, but the workshop deconvolves with
+  # calab (CaTune/CaDecon) and injects the result, so these values are only used
+  # if you fall back to CaMAP's built-in OASIS (ds.deconvolve()).
+  oasis:
+    g: [1.60, -0.63]        # AR(2) coefficients
+    baseline: p10
+    penalty: 0.8
+    s_min: 0
+
+behavior:
+  type: arena
+  speed_threshold: 25.0     # mm/s — drop frames slower than this for rate maps
+  speed_window_seconds: 0.25
+  hampel_window_frames: 7   # position outlier (Hampel) filter window
+  hampel_n_sigmas: 3.0      # MAD-scaled threshold (~99.7% Gaussian band)
+  spatial_map_2d:
+    bins: 50                # spatial bins per axis
+    min_occupancy: 0.05     # min seconds per bin to be valid
+    spatial_sigma: 3        # Gaussian smoothing (bins)
+    n_shuffles: 1000
+    random_seed: 1
+    event_threshold_sigma: 0
+    p_value_threshold: 0.05
+    min_shift_seconds: 20
+    si_weight_mode: amplitude
+    place_field_threshold: 0.35
+    place_field_min_bins: 5
+    place_field_seed_percentile: 95
+    stability_splits: [2, 10]
+    block_shift: 0

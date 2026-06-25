@@ -1,0 +1,27 @@
+# Per-session data paths for the capstone.
+#
+# Paths are resolved RELATIVE TO THIS FILE (capstone/config/), so `../../data`
+# points at the repo's data/ tree. They target the **prerecorded** session;
+# to use the workshop recording, change `prerecorded` -> `live` below (or copy
+# this file to data_paths_live.yaml and point the notebook at it).
+
+neural:
+  # Directory holding Minian's zarr output (C/C_lp.zarr, A.zarr, max_proj.zarr).
+  path: ../../data/sessions/prerecorded/minian_out
+  # Miniscope DAQ neural timestamps (must match Minian's frame count).
+  timestamp: ../../data/sessions/prerecorded/raw/neural_timestamp.csv
+
+behavior:
+  type: arena
+  fps: 20.0                 # behavior camera sampling rate, Hz
+  # DeepLabCut-format position CSV produced by the eztrack->DLC glue
+  # (capstone/workshop_glue/eztrack_to_dlc.py writes position_dlc.csv).
+  position: ../../data/sessions/prerecorded/eztrack_out/position_dlc.csv
+  timestamp: ../../data/sessions/prerecorded/raw/behavior_timestamp.csv
+  bodypart: LED             # must match the bodypart written by the converter
+
+  # --- Arena calibration (TODO: set for the example session) ---
+  arena_bounds: [0, 640, 0, 480]   # (x_min, x_max, y_min, y_max) in pixels
+  arena_size_mm: [500, 500]        # physical arena (width, height) in mm
+  camera_height_mm: 500            # camera height above floor (mm)
+  tracking_height_mm: 50           # tracked-point height above floor (mm)
