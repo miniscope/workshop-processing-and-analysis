@@ -106,6 +106,15 @@ Then launch Jupyter and pick the **Workshop** kernel:
 jupyter lab
 ```
 
+> ⚠️ **Before running Minian, size its memory limit to your machine.** The Minian
+> notebook caps RAM per dask worker via `MINIAN_MEM_LIMIT` (default `4GB`, sized
+> for a 16 GB laptop). On a larger machine the default makes workers spill to
+> disk needlessly and save cells can take minutes instead of seconds. Set it to
+> roughly `0.7 x total_RAM / n_workers` (e.g. `12GB` on a 64 GB box) before
+> launching: `export MINIAN_MEM_LIMIT=12GB` (PowerShell: `$env:MINIAN_MEM_LIMIT = "12GB"`).
+> Details + the dashboard symptom to look for:
+> [`tutorials/minian/README.md`](tutorials/minian/README.md#-performance-size-the-dask-memory-limit-to-your-machine).
+
 ---
 
 ## newest vs. pinned
