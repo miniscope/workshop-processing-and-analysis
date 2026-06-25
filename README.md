@@ -68,7 +68,8 @@ See [`data/README.md`](data/README.md) for the download commands and layout.
 
 ## Quick start
 
-Prerequisites: **Python 3.11–3.13** and **ffmpeg** (see [INSTALL.md](INSTALL.md)).
+Prerequisites: **Python 3.11–3.13**, **git**, and **ffmpeg**. Starting from a
+bare machine? [INSTALL.md](INSTALL.md) walks through installing all three per OS.
 
 ```bash
 git clone https://github.com/miniscope/workshop-processing-and-analysis.git
