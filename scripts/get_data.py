@@ -66,6 +66,16 @@ def _nonempty(d: Path) -> bool:
     return d.is_dir() and any(d.iterdir())
 
 
+def _safe_extract(z: zipfile.ZipFile, dest: Path) -> None:
+    """Extract *z* into *dest*, refusing any entry that escapes *dest* (Zip Slip)."""
+    dest = dest.resolve()
+    for name in z.namelist():
+        target = (dest / name).resolve()
+        if not target.is_relative_to(dest):
+            raise RuntimeError(f"unsafe path in archive: {name!r}")
+    z.extractall(dest)
+
+
 def discover(doi: str) -> dict[str, str]:
     """Return ``{filename: hash}`` for every file in the Zenodo deposit at *doi*."""
     p = pooch.create(path=CACHE, base_url=f"doi:{doi}/", registry=None)
@@ -84,19 +94,25 @@ def _fetch_into(doi: str, registry: dict[str, str], names: list[str], dest: Path
         p.fetch(n)
 
 
-def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> int:
-    """Fetch the requested *stages* of *session*. Returns how many are present after."""
+def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> tuple[int, int]:
+    """Fetch the requested *stages* of *session*.
+
+    Returns ``(present, failed)``: how many stages are available afterward, and
+    how many genuinely errored. A stage that simply isn't in the deposit is
+    *skipped*, not failed — only download/extract errors (and an unreadable
+    deposit) count toward *failed*.
+    """
     try:
         registry = discover(doi)
     except Exception as exc:  # bad/unpublished DOI, no network, API change
         print(f"  FAIL {session}: could not read deposit at doi:{doi} "
               f"({type(exc).__name__}: {exc})")
-        return 0
+        return 0, len(stages)
 
     zip_for = {st: f"{st}.zip" for st in PROCESSED}
     raw_files = [f for f in registry if f not in set(zip_for.values())]
 
-    ok = 0
+    ok = failed = 0
     for stage in stages:
         dest = DATA_ROOT / session / stage
         if _nonempty(dest) and not force:
@@ -119,13 +135,14 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> int
                 _fetch_into(doi, registry, [zname], CACHE)
                 dest.mkdir(parents=True, exist_ok=True)
                 with zipfile.ZipFile(CACHE / zname) as z:
-                    z.extractall(dest)
+                    _safe_extract(z, dest)
         except Exception as exc:
             print(f"  FAIL {session}/{stage}: {type(exc).__name__}: {exc}")
+            failed += 1
             continue
         print(f"       -> data/sessions/{session}/{stage}/")
         ok += 1
-    return ok
+    return ok, failed
 
 
 def main() -> int:
@@ -142,13 +159,18 @@ def main() -> int:
         print(f"No DOI for session '{args.session}'. Publish its deposit and set "
               f"SESSIONS['{args.session}'] in this script, or pass --doi 10.5281/zenodo.NNNNNN.")
         return 1
+    if "XXXXXXX" in doi:
+        print(f"Session '{args.session}' has a placeholder DOI ({doi}) — its dataset "
+              f"isn't published yet.\nPass a real one with --doi 10.5281/zenodo.NNNNNN, "
+              f"or wait for the workshop release.")
+        return 1
 
     stages = GROUPS[args.what]
     print(f"Fetching session '{args.session}' from doi:{doi} "
           f"({args.what}: {', '.join(stages)}) ...")
-    ok = fetch_session(args.session, doi, stages, args.force)
+    ok, failed = fetch_session(args.session, doi, stages, args.force)
     print(f"\n{ok}/{len(stages)} stage(s) available under data/sessions/{args.session}/")
-    return 0 if ok == len(stages) else 1
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

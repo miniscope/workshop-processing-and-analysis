@@ -19,41 +19,20 @@ from __future__ import annotations
 
 import argparse
 import shutil
-import subprocess
 import sys
 import webbrowser
-from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from _calab_common import TRACE_HELP, convert_minian_traces, deconv_dir, find_calab, run
 
 # Hosted CaDecon app (GitHub Pages); generates its own simulated data in-browser.
 CADECON_URL = "https://miniscope.github.io/CaLab/CaDecon/"
-
-
-def run(cmd: list[str]) -> int:
-    print("  $", " ".join(cmd))
-    return subprocess.run(cmd).returncode
-
-
-def minian_traces(calab_exe: str, session: str, trace: str, fs: float) -> tuple[Path, Path]:
-    """Convert a session's Minian C.zarr to traces.npy in its deconv_out/."""
-    sess = REPO_ROOT / "data" / "sessions" / session
-    czarr = sess / "minian_out" / f"{trace}.zarr"
-    deconv = sess / "deconv_out"
-    deconv.mkdir(parents=True, exist_ok=True)
-    if not czarr.exists():
-        sys.exit(f"{czarr} not found — run Minian / `python scripts/get_data.py`, or use --demo.")
-    if run([calab_exe, "convert", "-f", "minian", str(czarr), "--fs", str(fs),
-            "-o", str(deconv / "traces")]):
-        sys.exit("convert failed")
-    return deconv / "traces.npy", deconv
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--session", default="prerecorded")
     ap.add_argument("--fs", type=float, default=20.0, help="neural sampling rate (Hz)")
-    ap.add_argument("--trace", default="C", help="Minian zarr store name (C or C_lp)")
+    ap.add_argument("--trace", default="C", help=TRACE_HELP)
     ap.add_argument("--demo", action="store_true",
                     help="just open the hosted CaDecon landing page (simulate in-browser, no data)")
     args = ap.parse_args()
@@ -68,21 +47,24 @@ def main() -> int:
         webbrowser.open(CADECON_URL)
         return 0
 
-    calab_exe = shutil.which("calab")
-    if calab_exe is None:
-        sys.exit("calab not found — activate the workshop venv (pip install calab).")
-
-    traces_npy, deconv = minian_traces(calab_exe, args.session, args.trace, args.fs)
+    calab_exe = find_calab()
+    deconv = deconv_dir(args.session)
+    traces_npy = convert_minian_traces(calab_exe, args.session, args.trace, args.fs)
 
     # CaDecon writes {stem}_activity.npy + {stem}_results.json
     if run([calab_exe, "cadecon", str(traces_npy), "--fs", str(args.fs),
             "-o", str(deconv / "cadecon")]):
         return 1
 
-    src = deconv / "cadecon_activity.npy"
     dst = deconv / "activity.npy"
+    src = deconv / "cadecon_activity.npy"
     if not src.exists():
-        sys.exit(f"expected {src} not found — did CaDecon finish?")
+        # Tolerate a changed calab output name rather than misreporting it as
+        # "didn't finish": take any *_activity.npy it left behind.
+        hits = sorted(deconv.glob("*_activity.npy"))
+        if not hits:
+            sys.exit(f"expected {src} not found — did CaDecon finish?")
+        src = hits[0]
     shutil.copyfile(src, dst)
     print(f"\nSaved deconvolved activity -> {dst}")
     return 0

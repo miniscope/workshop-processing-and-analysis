@@ -24,28 +24,28 @@ Thin wrapper over the `calab` CLI (convert / tune / deconvolve).
 from __future__ import annotations
 
 import argparse
-import shutil
-import subprocess
 import sys
 import webbrowser
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from _calab_common import (
+    REPO_ROOT,
+    TRACE_HELP,
+    convert_minian_traces,
+    deconv_dir,
+    find_calab,
+    run,
+)
 
 # Hosted CaTune app (GitHub Pages); generates its own simulated data in-browser.
 CATUNE_URL = "https://miniscope.github.io/CaLab/CaTune/"
-
-
-def run(cmd: list[str]) -> int:
-    print("  $", " ".join(cmd))
-    return subprocess.run(cmd).returncode
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--session", default="prerecorded")
     ap.add_argument("--fs", type=float, default=20.0, help="neural sampling rate (Hz)")
-    ap.add_argument("--trace", default="C", help="Minian zarr store name (C or C_lp)")
+    ap.add_argument("--trace", default="C", help=TRACE_HELP)
     ap.add_argument("--demo", action="store_true",
                     help="just open the hosted CaTune landing page (simulate in-browser, no data)")
     ap.add_argument("--params", help="CaTune export JSON to apply (phase 2)")
@@ -64,16 +64,16 @@ def main() -> int:
         webbrowser.open(CATUNE_URL)
         return 0
 
-    calab_exe = shutil.which("calab")
-    if calab_exe is None:
-        sys.exit("calab not found — activate the workshop venv (pip install calab).")
-
-    deconv = REPO_ROOT / "data" / "sessions" / args.session / "deconv_out"
+    calab_exe = find_calab()
+    deconv = deconv_dir(args.session)
     traces_npy = deconv / "traces.npy"
     activity = deconv / "activity.npy"
 
     if args.params:
         # Phase 2: apply exported params -> activity.npy
+        if not Path(args.params).is_file():
+            sys.exit(f"params file not found: {args.params} — this is the JSON you "
+                     f"EXPORTed from CaTune (usually in your Downloads folder).")
         if not traces_npy.exists():
             sys.exit(f"{traces_npy} missing — run phase 1 first.")
         rc = run([calab_exe, "deconvolve", str(traces_npy), "-p", args.params, "-o", str(activity)])
@@ -82,13 +82,7 @@ def main() -> int:
         return rc
 
     # Phase 1: convert Minian C.zarr -> traces.npy, then open CaTune
-    czarr = REPO_ROOT / "data" / "sessions" / args.session / "minian_out" / f"{args.trace}.zarr"
-    if not czarr.exists():
-        sys.exit(f"{czarr} not found — run Minian / `python scripts/get_data.py`, or use --demo.")
-    deconv.mkdir(parents=True, exist_ok=True)
-    if run([calab_exe, "convert", "-f", "minian", str(czarr), "--fs", str(args.fs),
-            "-o", str(deconv / "traces")]):
-        return 1
+    traces_npy = convert_minian_traces(calab_exe, args.session, args.trace, args.fs)
 
     print(f"\nOpening CaTune for {traces_npy} ...")
     print("Tune parameters in the browser, EXPORT the params JSON, then re-run:")

@@ -95,15 +95,15 @@ capstone doesn't care which.
 neural timestamp file must have the same frame count as Minian's `C.zarr`.
 
 ## TODO before the workshop
-- [ ] Publish the `prerecorded` Zenodo deposit (`prepare_session.py` →
-      `zenodo_publish.py`) and set its DOI in `scripts/get_data.py`
+- [ ] Publish the `prerecorded` Zenodo deposit (run `prepare_session.py`, then
+      upload to Zenodo) and set its DOI in `scripts/get_data.py`
       (`SESSIONS["prerecorded"]`). Filenames + checksums are read from the DOI —
       nothing else to fill.
 - [ ] Build + upload the processed bundles as `minian_out.zip`, `deconv_out.zip`,
       `eztrack_out.zip` (each zip's **contents at the top level**, no wrapping
       folder, so they extract straight into the stage dir).
-- [ ] Live: after the workshop recording, `prepare_session.py` → `zenodo_publish.py`,
-      then hand participants the DOI for `--session live --doi …` (or set
+- [ ] Live: after the workshop recording, run `prepare_session.py` and upload to
+      Zenodo, then hand participants the DOI for `--session live --doi …` (or set
       `SESSIONS["live"]`).
 - [ ] Smoke-test `get_data.py` against the real DOI once published (the
       `XXXXXXX` placeholder will fail discovery until then).

@@ -16,7 +16,7 @@ and produces a clean, trimmed, space-efficient copy ready to analyze or upload:
   CNMF-E / Minian see the original pixels. Files past the cutoff are dropped; the
   boundary file is cut to the exact frame.
 
-Output mirrors the DAQ layout so downstream tools (and ``zenodo_publish.py``) can
+Output mirrors the DAQ layout so downstream tools (and Zenodo upload) can
 treat it like any session::
 
     <out>/Behavior/behavior.mp4, timeStamps.csv, metaData.json
@@ -58,12 +58,20 @@ def numbered_avis(d: Path) -> list[Path]:
     return sorted(files, key=lambda p: int(p.stem))
 
 
-def nb_frames(path: Path) -> int:
-    out = subprocess.run(
-        [FFPROBE, "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=nb_frames", "-of", "csv=p=0", str(path)],
+def _ffprobe_count(path: Path, entry: str, extra: list[str]) -> str:
+    return subprocess.run(
+        [FFPROBE, "-v", "error", "-select_streams", "v:0", *extra,
+         "-show_entries", entry, "-of", "csv=p=0", str(path)],
         capture_output=True, text=True, check=True,
     ).stdout.strip()
+
+
+def nb_frames(path: Path) -> int:
+    """Frame count of a video. Falls back to counting packets when the container
+    header has no ``nb_frames`` (common for the raw AVIs the DAQ writes)."""
+    out = _ffprobe_count(path, "stream=nb_frames", [])
+    if not out.isdigit():  # AVI/rawvideo often report N/A — count packets instead
+        out = _ffprobe_count(path, "stream=nb_read_packets", ["-count_packets"])
     if not out.isdigit():
         die(f"could not read frame count of {path} (got {out!r})")
     return int(out)
@@ -88,7 +96,11 @@ def cutoff_frames(ts_csv: Path, target_ms: float) -> tuple[int, float]:
             if not row:
                 continue
             keep += 1
-            last_ms = float(row[ts_col])
+            try:
+                last_ms = float(row[ts_col])
+            except (IndexError, ValueError):
+                die(f"{ts_csv}: row {keep} has no readable timestamp in column "
+                    f"{ts_col} (got {row[ts_col:ts_col+1] or row!r})")
             if last_ms >= target_ms:
                 break
     return keep, last_ms
@@ -127,13 +139,19 @@ def trim_miniscope(src_dir: Path, out_dir: Path, keep: int) -> int:
     return written
 
 
+def _concat_quote(p: Path) -> str:
+    """A path for ffmpeg's concat list. Its demuxer treats ' as a quote
+    delimiter, so a literal apostrophe (e.g. C:/Users/O'Brien/...) becomes '\\''."""
+    return p.as_posix().replace("'", "'\\''")
+
+
 def encode_behavior(src_dir: Path, dest: Path, keep: int, crf: int, gop: int) -> None:
     """Concat serial AVIs, trim to ``keep`` frames, encode grayscale H.264."""
     segs = numbered_avis(src_dir)
     if not segs:
         die(f"no serial .avi segments found in {src_dir}")
     listfile = dest.parent / "_concat.txt"
-    listfile.write_text("".join(f"file '{p.as_posix()}'\n" for p in segs))
+    listfile.write_text("".join(f"file '{_concat_quote(p)}'\n" for p in segs))
     try:
         subprocess.run(
             [FFMPEG, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
@@ -198,7 +216,7 @@ def main(argv=None) -> int:
           f"consolidated -> behavior.mp4 (H.264 CRF {args.crf})")
 
     print(f"\nDone. Prepared session at {out}\n"
-          f"  Next: upload with zenodo_publish.py, or point tutorials at this dir.")
+          f"  Next: upload this dir to Zenodo, or point tutorials at it directly.")
     return 0
 
 

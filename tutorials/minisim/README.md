@@ -25,18 +25,19 @@ jupyter lab    # navigate to tutorials/minisim/notebooks/
 
 ## What's bundled
 
+`copy --all` writes one folder per notebook into `tutorials/minisim/notebooks/`.
 Two categories ship side by side:
 
-**`training/`** — the teaching ladder (each notebook isolates one effect to *explain* it):
+The teaching ladder (each notebook isolates one effect to *explain* it):
 - `01_anatomy` — anatomy of a simulated recording
 - `02_demixing` — source demixing
 - `03_metrics` — quality metrics
 
-**`studio/`** — production tools (expose every knob to *make usable simulated data*):
+Production tools (expose every knob to *make usable simulated data*):
 - `build_recording` — the data generator
 
 > minisim *generates* its recordings from code, so these notebooks need no data
-> download. The `build_recording` studio notebook is a good way to produce a
+> download. The `build_recording` notebook is a good way to produce a
 > simulated session to practice the downstream tools on.
 
 ## TODO

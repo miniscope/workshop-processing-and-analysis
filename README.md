@@ -110,6 +110,7 @@ workshop-processing-and-analysis/
 │   ├── get_data.py           # pooch-based Zenodo fetch (per session, local-first)
 │   └── fetch_notebooks.py    # copy each tool's bundled notebooks into tutorials/
 ├── tutorials/                # one folder per upstream tool (links + run notes)
+│   ├── overview/             # processing_overview.ipynb (the pipeline end-to-end)
 │   ├── minisim/
 │   ├── minian/
 │   ├── deconvolution/        # calab: CaTune / CaDecon

@@ -64,7 +64,9 @@ def inject_deconv_activity(ds: Any, deconv_output: str | Path) -> None:
     if activity.shape[1] != n_frames:
         raise ValueError(
             f"Deconvolved activity has {activity.shape[1]} timepoints but there are "
-            f"{n_frames} neural frames."
+            f"{n_frames} neural frames. The activity must cover the same frames as "
+            f"Minian's C.zarr — re-run deconvolution on this session's traces, or check "
+            f"that neural_timestamp.csv matches C.zarr's frame count."
         )
 
     ds.good_unit_ids = unit_ids
