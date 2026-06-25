@@ -1,26 +1,38 @@
 """Fetch workshop data from Zenodo with pooch — per session, per stage, local-first.
 
-Data lives under ``data/sessions/<name>/`` with one subdir per stage::
+Each session is **one Zenodo deposit**. We **auto-discover** its files and their
+checksums straight from the DOI (``pooch.load_registry_from_doi``), so the only
+thing this script needs to know is the DOI — no hardcoded filenames or hashes.
+A deposit holds:
+
+* the **raw** recording as individual files (``behavior.mp4``, ``*.avi``,
+  ``*_timestamp.csv``, ``*_metaData.json`` — anything that isn't a stage zip),
+  downloaded straight into ``raw/``; and
+* one zip per **processed** stage (``minian_out.zip`` / ``deconv_out.zip`` /
+  ``eztrack_out.zip``), extracted into that stage's dir.
+
+Data lands under ``data/sessions/<name>/``::
 
     raw/         miniscope video, behavior video, neural + behavior timestamps
     minian_out/  Minian output   (step 2)
     deconv_out/  calab output    (step 3)
     eztrack_out/ eztrack output  (step 4)
 
-Each stage is a separate Zenodo zip so it can be pulled independently. The fetch
-is **local-first**: a stage you already produced (by running the upstream step)
-is kept, and only the missing stages are downloaded. So whether or not you ran
-Minian / calab / eztrack yourself, the capstone reads the same paths.
+The fetch is **local-first**: a stage you already produced (by running the
+upstream step) is kept, and only missing stages are downloaded. A stage that
+isn't in the deposit yet is simply skipped.
 
-Downloads use ``pooch`` (checksummed + cached, the same library Minian uses), so
-re-runs are free and corrupt downloads are caught.
+The **live** dataset is published *during* the workshop, so its DOI isn't baked
+in — pass it at fetch time with ``--doi`` (no code edit, no ``git pull``):
+
+    python scripts/get_data.py --session live --doi 10.5281/zenodo.NNNNNN
 
 Examples
 --------
     python scripts/get_data.py                          # prerecorded, all stages
     python scripts/get_data.py --what raw               # just the raw recording
     python scripts/get_data.py --what processed         # minian+deconv+eztrack outputs
-    python scripts/get_data.py --session live           # the workshop recording
+    python scripts/get_data.py --session live --doi ... # the workshop recording
     python scripts/get_data.py --force                  # re-download even if present
 """
 
@@ -37,31 +49,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_ROOT = REPO_ROOT / "data" / "sessions"
 CACHE = REPO_ROOT / "data" / ".cache"
 
-STAGE_KEYS = ["raw", "minian_out", "deconv_out", "eztrack_out"]
-GROUPS = {
-    "raw": ["raw"],
-    "processed": ["minian_out", "deconv_out", "eztrack_out"],
-    "all": STAGE_KEYS,
-}
+PROCESSED = ["minian_out", "deconv_out", "eztrack_out"]
+STAGE_KEYS = ["raw", *PROCESSED]
+GROUPS = {"raw": ["raw"], "processed": PROCESSED, "all": STAGE_KEYS}
 
-# TODO: fill in the Zenodo DOI and per-stage sha256 hashes once data is uploaded.
-# Each stage bundle is a zip of that stage's *contents* (no top-level folder), so
-# it extracts directly into data/sessions/<name>/<stage>/.
-SESSIONS: dict[str, dict] = {
-    "prerecorded": {
-        "doi": "10.5281/zenodo.XXXXXXX",  # TODO: backup dataset DOI
-        "stages": {
-            "raw": {"zip": "raw.zip", "hash": None},  # TODO: "sha256:..."
-            "minian_out": {"zip": "minian_out.zip", "hash": None},
-            "deconv_out": {"zip": "deconv_out.zip", "hash": None},
-            "eztrack_out": {"zip": "eztrack_out.zip", "hash": None},
-        },
-    },
-    "live": {
-        # Set during the workshop if a freshly recorded dataset is uploaded.
-        "doi": None,  # TODO
-        "stages": {},
-    },
+# One Zenodo deposit per session; we read filenames + hashes from the DOI itself.
+# Fill a DOI once its deposit is published. The live dataset's DOI is usually
+# passed at workshop time via --doi rather than committed here.
+SESSIONS: dict[str, str | None] = {
+    "prerecorded": "10.5281/zenodo.XXXXXXX",  # TODO: backup dataset DOI (once published)
+    "live": None,                              # set here if you publish it, or pass --doi
 }
 
 
@@ -69,48 +66,87 @@ def _nonempty(d: Path) -> bool:
     return d.is_dir() and any(d.iterdir())
 
 
-def fetch_stage(session: str, stage: str, force: bool) -> bool:
-    """Ensure one stage is available locally. Returns True if present afterward."""
-    cfg = SESSIONS[session]
-    dest = DATA_ROOT / session / stage
+def discover(doi: str) -> dict[str, str]:
+    """Return ``{filename: hash}`` for every file in the Zenodo deposit at *doi*."""
+    p = pooch.create(path=CACHE, base_url=f"doi:{doi}/", registry=None)
+    p.load_registry_from_doi()  # queries the Zenodo API for the file list + checksums
+    return dict(p.registry)
 
-    if _nonempty(dest) and not force:
-        print(f"  KEEP {session}/{stage}: local data present (use --force to re-download).")
-        return True
 
-    if cfg.get("doi") is None or stage not in cfg.get("stages", {}):
-        print(f"  SKIP {session}/{stage}: no Zenodo bundle configured yet (TODO).")
-        return False
+def _fetch_into(doi: str, registry: dict[str, str], names: list[str], dest: Path) -> None:
+    """Download *names* (a subset of *registry*) into *dest*, verified by hash."""
+    dest.mkdir(parents=True, exist_ok=True)
+    p = pooch.create(
+        path=dest, base_url=f"doi:{doi}/",
+        registry={n: registry[n] for n in names},
+    )
+    for n in names:
+        p.fetch(n)
 
-    spec = cfg["stages"][stage]
-    print(f"  GET  {session}/{stage}: {spec['zip']}")
+
+def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> int:
+    """Fetch the requested *stages* of *session*. Returns how many are present after."""
     try:
-        archive = pooch.retrieve(
-            url=f"doi:{cfg['doi']}/{spec['zip']}",
-            known_hash=spec["hash"],
-            fname=spec["zip"],
-            path=CACHE,
-        )
-        dest.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(archive) as z:
-            z.extractall(dest)
-    except Exception as exc:  # network / bad DOI / bad hash / corrupt zip
-        print(f"  FAIL {session}/{stage}: {type(exc).__name__}: {exc}")
-        return False
-    print(f"       extracted -> data/sessions/{session}/{stage}/")
-    return True
+        registry = discover(doi)
+    except Exception as exc:  # bad/unpublished DOI, no network, API change
+        print(f"  FAIL {session}: could not read deposit at doi:{doi} "
+              f"({type(exc).__name__}: {exc})")
+        return 0
+
+    zip_for = {st: f"{st}.zip" for st in PROCESSED}
+    raw_files = [f for f in registry if f not in set(zip_for.values())]
+
+    ok = 0
+    for stage in stages:
+        dest = DATA_ROOT / session / stage
+        if _nonempty(dest) and not force:
+            print(f"  KEEP {session}/{stage}: local data present (use --force to re-download).")
+            ok += 1
+            continue
+        try:
+            if stage == "raw":
+                if not raw_files:
+                    print(f"  SKIP {session}/raw: no raw files in this deposit.")
+                    continue
+                print(f"  GET  {session}/raw: {len(raw_files)} files")
+                _fetch_into(doi, registry, raw_files, dest)
+            else:
+                zname = zip_for[stage]
+                if zname not in registry:
+                    print(f"  SKIP {session}/{stage}: {zname} not in this deposit yet.")
+                    continue
+                print(f"  GET  {session}/{stage}: {zname}")
+                _fetch_into(doi, registry, [zname], CACHE)
+                dest.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(CACHE / zname) as z:
+                    z.extractall(dest)
+        except Exception as exc:
+            print(f"  FAIL {session}/{stage}: {type(exc).__name__}: {exc}")
+            continue
+        print(f"       -> data/sessions/{session}/{stage}/")
+        ok += 1
+    return ok
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fetch workshop data from Zenodo (local-first).")
     ap.add_argument("--session", default="prerecorded", choices=list(SESSIONS))
     ap.add_argument("--what", default="all", choices=list(GROUPS))
+    ap.add_argument("--doi", help="override the session DOI (e.g. the live dataset published "
+                                   "during the workshop)")
     ap.add_argument("--force", action="store_true", help="re-download even if local data exists")
     args = ap.parse_args()
 
+    doi = args.doi or SESSIONS.get(args.session)
+    if not doi:
+        print(f"No DOI for session '{args.session}'. Publish its deposit and set "
+              f"SESSIONS['{args.session}'] in this script, or pass --doi 10.5281/zenodo.NNNNNN.")
+        return 1
+
     stages = GROUPS[args.what]
-    print(f"Fetching session '{args.session}' ({args.what}: {', '.join(stages)}) ...")
-    ok = sum(fetch_stage(args.session, s, args.force) for s in stages)
+    print(f"Fetching session '{args.session}' from doi:{doi} "
+          f"({args.what}: {', '.join(stages)}) ...")
+    ok = fetch_session(args.session, doi, stages, args.force)
     print(f"\n{ok}/{len(stages)} stage(s) available under data/sessions/{args.session}/")
     return 0 if ok == len(stages) else 1
 

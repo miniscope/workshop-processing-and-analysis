@@ -2,6 +2,9 @@
 data/sessions/
 data/.cache/
 
+# Minian dask scratch (intpath / MINIAN_INTERMEDIATE) — regenerated each run.
+minian_intermediate/
+
 # Python
 __pycache__/
 *.py[cod]
