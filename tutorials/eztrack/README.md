@@ -2,7 +2,7 @@
 
 Behavioral tracking: extract the animal's position from the behavior video.
 
-- **Env:** `workshop`
+- **Env:** the shared `.venv`
 - **Materials:** the tracking notebook in the [eztrack fork](https://github.com/daharoni/ezTrack)
 
 The `workshop` env installs the fork (`eztrack` v2.x, pip-installable, ships its

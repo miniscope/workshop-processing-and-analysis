@@ -1,49 +1,64 @@
 # Installation
 
-The workshop targets a **single shared conda environment** (`workshop`) so
-attendees install once and use one Jupyter kernel all week.
+The workshop runs in a **single Python virtual environment** (`venv`) so
+attendees install once and use one Jupyter kernel for every module. No conda
+required — everything installs from PyPI (plus the eztrack fork from GitHub).
+
+Verified end-to-end: all five tools (minisim, Minian 2.0, CaTune/CaDecon via
+calab, CaMAP, eztrack) resolve, install, and import together in one Python 3.12
+venv with no conflicts.
+
+## Prerequisites (not installed by pip)
+
+- **Python 3.11–3.13** (CaMAP requires this range)
+- **ffmpeg** — system binary used for video I/O (the pip `ffmpeg-python` package
+  is only a wrapper around it):
+  - macOS: `brew install ffmpeg`
+  - Linux: `sudo apt install ffmpeg`
+  - Windows: `winget install ffmpeg` (or `choco install ffmpeg`)
+  - Verify with `ffmpeg -version`
 
 ## Recommended path
 
 ```bash
-conda env create -f environment.yml
-conda activate workshop
+python -m venv .venv
+# activate: macOS/Linux
+source .venv/bin/activate
+# activate: Windows PowerShell
+.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt          # newest from PyPI
+# or, for the reproducible known-good set:
+# python -m pip install -r requirements.lock
+
 python -m ipykernel install --user --name workshop --display-name "Workshop"
-python scripts/download_data.py        # example data + golden checkpoints
+python scripts/download_data.py                    # example data + golden checkpoints
 ```
 
-Verify the capstone runs end-to-end on the golden checkpoints:
+## newest vs. pinned
+
+- `requirements.txt` — top-level packages, **unpinned** (pulls newest). Good
+  during development.
+- `requirements.lock` — a **full pinned freeze** of a verified-working set.
+  Switch the workshop to this once development locks in, so the room is
+  reproducible. The CI smoke test flags drift in the meantime.
+
+## Verify the capstone runs
+
+On the golden checkpoints, headless (same as CI — see `.github/workflows/smoke.yml`):
 
 ```bash
 jupyter nbconvert --to notebook --execute --inplace \
   capstone/camap_placecells.ipynb
 ```
 
-(That same command runs in CI — see `.github/workflows/smoke.yml`.)
+## Notes
 
-## If the single environment won't resolve
-
-CaMAP sets an aggressively modern floor (Python `>=3.11`, `xarray>=2025.10`,
-`zarr>=2.17`, `pyarrow>=23`, `opencv>=4.13`). If pip's resolver refuses, the
-most likely conflict is **Minian** (numba ↔ numpy ceilings, older zarr
-expectation).
-
-Do **not** pre-fragment. Instead, isolate only the offending tool:
-
-```bash
-# example: Minian in its own env, everything else stays shared
-conda env create -f envs/minian.yml
-conda activate minian   # for the Minian module only
-```
-
-The capstone only needs CaMAP, because by then every upstream tool is just
-*files on disk* — so even if Minian lives in its own env, the capstone runs in
-the shared `workshop` env against the checkpoints.
-
-## Per-tool notes
-
-- **CaTune** (`pip install calab`) launches a web interface; see
-  `tutorials/catune/README.md` for how to start it and where it writes output.
-- **OASIS** (CaMAP's fallback deconvolver): installed via conda-forge here to
-  avoid the source build. If you must build from source you need a C compiler.
-- **eztrack fork**: confirm the fork URL/ref in `environment.yml`.
+- **eztrack** is a pure-Python, cross-platform package built from the
+  [daharoni fork](https://github.com/daharoni/ezTrack) on install (it isn't
+  published to PyPI). No compiler needed.
+- **CaTune** (`calab`) launches a web interface; see
+  `tutorials/deconvolution/README.md` for how to start it and where it writes.
+- **oasis-deconv** is optional and intentionally left out — the workshop does
+  deconvolution in calab and bypasses CaMAP's built-in OASIS.

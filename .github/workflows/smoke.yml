@@ -12,16 +12,22 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -el {0}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: conda-incubator/setup-miniconda@v3
+      - uses: actions/setup-python@v5
         with:
-          environment-file: environment.yml
-          activate-environment: workshop
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          # swap to the pinned set once development locks in:
+          # python -m pip install -r requirements.lock
 
       - name: Fetch example data + checkpoints
         run: python scripts/download_data.py

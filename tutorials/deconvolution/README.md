@@ -11,12 +11,12 @@ Either produces the deconvolved output that CaMAP consumes. Because this step is
 explicit, **Minian's own deconvolution is skipped** (see `tutorials/minian/`) —
 calab owns deconvolution here, and CaMAP's built-in OASIS is bypassed.
 
-- **Env:** `workshop`
+- **Env:** the shared `.venv`
 
 ## Run
 
 ```bash
-conda activate workshop
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 # launch CaTune / run CaDecon from calab
 # TODO: confirm the exact launch command(s) from `calab`
 ```

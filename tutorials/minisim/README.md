@@ -3,13 +3,13 @@
 Simulate miniscope recordings to build intuition for what the upstream signal
 looks like before any processing.
 
-- **Env:** `workshop`
+- **Env:** the shared `.venv`
 - **Materials:** teaching notebooks in the [minisim repo](https://github.com/miniscope/minisim) <!-- TODO: confirm URL + pin ref -->
 
 ## Run
 
 ```bash
-conda activate workshop
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 # open the minisim teaching notebooks (from the installed package / cloned repo)
 ```
 

@@ -47,12 +47,13 @@ See [`data/README.md`](data/README.md) for download links and layout.
 
 ## Quick start
 
+Prerequisites: **Python 3.11–3.13** and **ffmpeg** (see [INSTALL.md](INSTALL.md)).
+
 ```bash
 git clone https://github.com/miniscope/workshop-processing-and-analysis.git
 cd workshop-processing-and-analysis
-# create the environment (see INSTALL.md for details / fallbacks)
-conda env create -f environment.yml
-conda activate workshop
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt           # see INSTALL.md for the pinned lock
 # fetch the example data + golden checkpoints
 python scripts/download_data.py
 ```
@@ -64,9 +65,9 @@ Then open the module you're on under [`tutorials/`](tutorials/) or [`capstone/`]
 ```
 workshop-processing-and-analysis/
 ├── README.md                 # this file
-├── INSTALL.md                # environment setup + per-tool fallbacks
-├── environment.yml           # single shared env (pinned)
-├── envs/                     # escape hatch: per-tool envs IF the single env can't resolve
+├── INSTALL.md                # venv setup + prerequisites (ffmpeg)
+├── requirements.txt          # top-level deps (newest from PyPI)
+├── requirements.lock         # full pinned freeze (verified-working set)
 ├── data/
 │   ├── README.md             # download links + checksums
 │   └── checkpoints/          # golden intermediate outputs (one per stage)

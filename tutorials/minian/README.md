@@ -9,7 +9,7 @@ calcium (`C` / `C_lp`) but do not use Minian's deconvolved-activity estimate
 downstream. So Minian's output for this workshop is denoised traces +
 footprints, not deconvolved activity.
 
-- **Env:** `workshop` (fallback `envs/minian.yml` if the shared env can't resolve — see INSTALL.md)
+- **Env:** the shared `.venv` (Minian 2.0 coexists with the other tools — verified)
 - **Materials:** the [Minian walkthrough notebook](https://github.com/denisecailab/minian) <!-- TODO: confirm URL + pin ref -->
 
 ## Inputs / outputs

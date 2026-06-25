@@ -5,7 +5,7 @@ deconvolved neural activity (calab: CaTune / CaDecon), and the tracked behavior
 (eztrack), then walk through combining neuro-behavioral data and analyzing place
 cells with full metrics.
 
-- **Env:** `workshop` (only CaMAP is needed here — upstream tools are just files now)
+- **Env:** the shared `.venv` (only CaMAP is needed here — upstream tools are just files now)
 - **Notebook:** [`camap_placecells.ipynb`](camap_placecells.ipynb)
 - **Run last:** consumes the outputs of all four upstream modules.
 

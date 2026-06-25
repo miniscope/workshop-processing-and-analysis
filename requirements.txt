@@ -1,0 +1,27 @@
+# Workshop processing & analysis — top-level dependencies (newest from PyPI).
+#
+# Verified to resolve + install + import together in one Python 3.12 venv
+# (Minian 2.0.0 shares CaMAP's modern numpy/zarr/xarray, so no conflict).
+# For a reproducible, known-good set use requirements.lock instead.
+#
+# Prerequisites NOT installed by pip (see INSTALL.md):
+#   - Python 3.11-3.13
+#   - ffmpeg (system binary)
+
+minisim          # simulate miniscope recordings
+minian           # CNMF processing -> denoised traces & footprints
+calab            # CaTune (tuning UI) + CaDecon (deconvolution)
+camap            # capstone: place-cell analysis
+
+# eztrack fork: pure-Python, cross-platform; built from git (not published to PyPI)
+eztrack @ git+https://github.com/daharoni/ezTrack
+
+# Jupyter for running the tutorial + capstone notebooks
+jupyterlab
+ipympl
+ipywidgets
+
+# Optional — CaMAP's built-in OASIS deconvolution. The workshop bypasses this
+# (calab does deconvolution), so it's not required. Needs a C build on some
+# platforms; prefer conda-forge if you do want it.
+# oasis-deconv
