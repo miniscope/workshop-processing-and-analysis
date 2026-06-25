@@ -24,10 +24,11 @@ happened upstream (calab), so CaMAP's built-in OASIS is bypassed.
 
 - `eztrack_to_dlc.py` — converts eztrack's flat `frame,x,y` CSV into the
   DeepLabCut-style CSV CaMAP reads. **Fully implemented.**
-- `deconv_inject.py` — injects calab's (CaTune/CaDecon) deconvolved neural
-  activity into `ds.good_unit_ids` / `ds.S_list`, bypassing CaMAP's OASIS.
-  Injection mechanics are wired; the **output parser is a TODO** pending the
-  calab dev branch.
+- `deconv_inject.py` — loads `deconv_out/activity.npy` (calab CaTune/CaDecon
+  output), aligns rows with `ds.traces` unit ids, and injects into
+  `ds.good_unit_ids` / `ds.S_list`, bypassing CaMAP's OASIS. **Implemented.**
+  (Produce `activity.npy` with `tutorials/deconvolution/run_catune.py` /
+  `run_cadecon.py`.)
 
 Both live in [`workshop_glue/`](workshop_glue/) and are imported by the notebook.
 
@@ -46,6 +47,5 @@ These are populated either by your own upstream runs or by
 `python scripts/get_data.py` (local-first — see `data/README.md`).
 
 ## TODO
-- [ ] Fill real paths once the example data is uploaded.
-- [ ] Finish `deconv_inject.py` parser against the calab dev-branch output format.
 - [ ] Verify the arena config (`config/`) matches the example session (fps, arena bounds, mm scale).
+- [ ] Run end-to-end once the example data lands on Zenodo (CI smoke test).
