@@ -88,6 +88,13 @@ right next to each module's README. They're regenerated, not committed.
 
 Then open the module you're on under [`tutorials/`](tutorials/) or [`capstone/`](capstone/).
 
+> ⚠️ **Performance (read before running Minian):** if a save/compute cell takes
+> minutes instead of seconds, set `MINIAN_MEM_LIMIT` to match your RAM
+> (roughly `0.7 x total_RAM / n_workers`, e.g. `12GB` on a 64 GB machine). The
+> `4GB` default is sized for a 16 GB laptop and makes dask spill to disk
+> needlessly on larger machines, which can turn a ~40 s save into ~10 min. See
+> [`tutorials/minian/README.md`](tutorials/minian/README.md#-performance-size-the-dask-memory-limit-to-your-machine).
+
 ## Repo layout
 
 ```
