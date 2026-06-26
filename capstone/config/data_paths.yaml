@@ -28,7 +28,7 @@ behavior:
 
   # --- Arena calibration (V4-CA1-OpenField, behavior.mp4 is 740x734 px) ---
   arena_bounds: [0, 740, 0, 734]   # (x_min, x_max, y_min, y_max) px; animal covers the full frame
-  arena_size_mm: [300, 300]        # physical open-field interior (width, height) in mm
+  arena_size_mm: [400, 400]        # physical open-field interior (width, height) in mm
   # Parallax correction disabled: camera height above the floor wasn't measured
   # for this session. tracking_height_mm: 0 makes the correction an identity
   # (factor = (H - h)/H = 1). The LED sits ~40 mm above the floor — set
