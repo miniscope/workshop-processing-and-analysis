@@ -1,15 +1,25 @@
-"""Fetch workshop data from Zenodo with pooch — per session, per stage, local-first.
+"""Fetch workshop data from a DOI-referenced public archive — per session, per
+stage, local-first.
 
-Each session is **one Zenodo deposit**. We **auto-discover** its files and their
-checksums straight from the DOI (``pooch.load_registry_from_doi``), so the only
-thing this script needs to know is the DOI — no hardcoded filenames or hashes.
-A deposit holds:
+Each session is **one DOI-referenced dataset** on a public archive (UCLA
+Dataverse today; Zenodo is equally supported for future deposits). We read the
+file list and checksums straight from the archive, so the only thing this script
+needs to know is the DOI — no hardcoded filenames or hashes. A dataset holds:
 
 * the **raw** recording as individual files (``behavior.mp4``, ``*.avi``,
   ``*_timestamp.csv``, ``*_metaData.json`` — anything that isn't a stage zip),
   downloaded straight into ``raw/``; and
 * one zip per **processed** stage (``minian_out.zip`` / ``deconv_out.zip`` /
   ``eztrack_out.zip``), extracted into that stage's dir.
+
+How we resolve a DOI depends on where it lives:
+
+* **Dataverse** — read the file list from the Dataverse native API directly.
+  (pooch resolves a DOI by *following the doi.org redirect*, and UCLA
+  Dataverse's ``/citation`` landing redirect trips that up — it mangles the
+  host — so we don't route Dataverse through pooch.)
+* **Zenodo / figshare / etc.** — fall back to ``pooch.load_registry_from_doi``,
+  which handles those fine.
 
 Data lands under ``data/sessions/<name>/``::
 
@@ -25,7 +35,7 @@ isn't in the deposit yet is simply skipped.
 The **live** dataset is published *during* the workshop, so its DOI isn't baked
 in — pass it at fetch time with ``--doi`` (no code edit, no ``git pull``):
 
-    python scripts/get_data.py --session live --doi 10.5281/zenodo.NNNNNN
+    python scripts/get_data.py --session live --doi <DOI>
 
 Examples
 --------
@@ -39,11 +49,13 @@ Examples
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
+import urllib.request
 import zipfile
 from pathlib import Path
-
-import pooch
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_ROOT = REPO_ROOT / "data" / "sessions"
@@ -53,17 +65,124 @@ PROCESSED = ["minian_out", "deconv_out", "eztrack_out"]
 STAGE_KEYS = ["raw", *PROCESSED]
 GROUPS = {"raw": ["raw"], "processed": PROCESSED, "all": STAGE_KEYS}
 
-# One Zenodo deposit per session; we read filenames + hashes from the DOI itself.
-# Fill a DOI once its deposit is published. The live dataset's DOI is usually
+_TIMEOUT = 60  # seconds, per request
+_CHUNK = 1 << 20  # 1 MiB streaming chunk
+
+# One dataset (DOI) per session; we read filenames + hashes from the DOI itself.
+# Fill a DOI once its dataset is published. The live dataset's DOI is usually
 # passed at workshop time via --doi rather than committed here.
 SESSIONS: dict[str, str | None] = {
-    "prerecorded": "10.5281/zenodo.XXXXXXX",  # TODO: backup dataset DOI (once published)
-    "live": None,                              # set here if you publish it, or pass --doi
+    "prerecorded": "10.25346/S6SGHPCZ",  # UCLA Dataverse — published
+    "live": None,                        # set here if you publish it, or pass --doi
 }
 
 
 def _nonempty(d: Path) -> bool:
     return d.is_dir() and any(d.iterdir())
+
+
+def _get_json(url: str) -> dict:
+    with urllib.request.urlopen(url, timeout=_TIMEOUT) as r:
+        return json.load(r)
+
+
+def _landing(doi: str) -> str:
+    """The DOI's registered landing URL (from DataCite), e.g. the archive page."""
+    meta = _get_json(f"https://api.datacite.org/dois/{doi}")
+    return meta["data"]["attributes"]["url"]
+
+
+def _dataverse_registry(server: str, doi: str) -> dict[str, dict]:
+    """``{filename: {"id", "md5"}}`` from a Dataverse instance's native API."""
+    api = f"{server}/api/datasets/:persistentId?persistentId=doi:{doi}"
+    data = _get_json(api)
+    reg: dict[str, dict] = {}
+    for entry in data["data"]["latestVersion"]["files"]:
+        df = entry["dataFile"]
+        label = entry.get("directoryLabel")  # Dataverse folder, if any
+        name = f"{label}/{df['filename']}" if label else df["filename"]
+        reg[name] = {"id": df["id"], "md5": df.get("md5", ""),
+                     "size": df.get("filesize", 0)}
+    return reg
+
+
+def discover(doi: str) -> tuple[str, dict, str]:
+    """Resolve *doi* to its file list.
+
+    Returns ``(kind, registry, ctx)``:
+
+    * ``kind == "dataverse"``: ``registry`` is ``{name: {"id", "md5"}}`` and
+      ``ctx`` is the Dataverse base URL (download via the native API).
+    * ``kind == "pooch"``: ``registry`` is ``{name: hash}`` and ``ctx`` is the
+      DOI (download via pooch — Zenodo/figshare/etc.).
+    """
+    parts = urlsplit(_landing(doi))
+    server = f"{parts.scheme}://{parts.netloc}"
+    try:
+        return "dataverse", _dataverse_registry(server, doi), server
+    except Exception:
+        # Not a Dataverse instance (or no native API) — let pooch handle it.
+        import pooch  # lazy: only needed for non-Dataverse archives
+
+        p = pooch.create(path=CACHE, base_url=f"doi:{doi}/", registry=None)
+        p.load_registry_from_doi()
+        return "pooch", dict(p.registry), doi
+
+
+def _human(n: float) -> str:
+    """Bytes as a short human string (e.g. ``9.4 GB``)."""
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{int(n)} B"
+        n /= 1024
+
+
+def _dataverse_download(server: str, rec: dict, dest_path: Path, label: str = "") -> None:
+    """Stream a Dataverse datafile to *dest_path*, verifying its MD5.
+
+    Prints a live, single-line progress meter (downloaded / total, %) so a
+    multi-GB raw pull doesn't look hung. *label* prefixes the line (e.g.
+    ``[3/28] 12.avi``)."""
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    url = f"{server}/api/access/datafile/{rec['id']}"
+    total = int(rec.get("size") or 0)
+    digest = hashlib.md5()
+    done = 0
+    with urllib.request.urlopen(url, timeout=_TIMEOUT) as r, open(dest_path, "wb") as out:
+        for chunk in iter(lambda: r.read(_CHUNK), b""):
+            out.write(chunk)
+            digest.update(chunk)
+            done += len(chunk)
+            pct = f"{done / total * 100:5.1f}%" if total else "  ?  "
+            bar = f"{_human(done)}" + (f" / {_human(total)}" if total else "")
+            sys.stdout.write(f"\r       {label} {pct}  {bar}        ")
+            sys.stdout.flush()
+    sys.stdout.write("\r" + " " * 79 + "\r")  # clear the progress line
+    sys.stdout.flush()
+    if rec["md5"] and digest.hexdigest() != rec["md5"]:
+        dest_path.unlink(missing_ok=True)
+        raise RuntimeError(f"MD5 mismatch for {dest_path.name}")
+    print(f"       {label} done ({_human(done)})")
+
+
+def _fetch(kind: str, ctx: str, registry: dict, names: list[str], dest: Path) -> None:
+    """Download *names* (a subset of *registry*) into *dest*, verified by hash."""
+    dest.mkdir(parents=True, exist_ok=True)
+    if kind == "dataverse":
+        total = sum(int(registry[n].get("size") or 0) for n in names)
+        if total:
+            print(f"       ({len(names)} files, {_human(total)} total)")
+        for i, n in enumerate(names, 1):
+            _dataverse_download(ctx, registry[n], dest / n, label=f"[{i}/{len(names)}] {n}")
+    else:  # pooch (Zenodo/figshare/etc.)
+        import pooch
+
+        p = pooch.create(
+            path=dest, base_url=f"doi:{ctx}/",
+            registry={n: registry[n] for n in names},
+        )
+        for n in names:
+            p.fetch(n)
 
 
 def _safe_extract(z: zipfile.ZipFile, dest: Path) -> None:
@@ -76,24 +195,6 @@ def _safe_extract(z: zipfile.ZipFile, dest: Path) -> None:
     z.extractall(dest)
 
 
-def discover(doi: str) -> dict[str, str]:
-    """Return ``{filename: hash}`` for every file in the Zenodo deposit at *doi*."""
-    p = pooch.create(path=CACHE, base_url=f"doi:{doi}/", registry=None)
-    p.load_registry_from_doi()  # queries the Zenodo API for the file list + checksums
-    return dict(p.registry)
-
-
-def _fetch_into(doi: str, registry: dict[str, str], names: list[str], dest: Path) -> None:
-    """Download *names* (a subset of *registry*) into *dest*, verified by hash."""
-    dest.mkdir(parents=True, exist_ok=True)
-    p = pooch.create(
-        path=dest, base_url=f"doi:{doi}/",
-        registry={n: registry[n] for n in names},
-    )
-    for n in names:
-        p.fetch(n)
-
-
 def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> tuple[int, int]:
     """Fetch the requested *stages* of *session*.
 
@@ -103,7 +204,7 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> tup
     deposit) count toward *failed*.
     """
     try:
-        registry = discover(doi)
+        kind, registry, ctx = discover(doi)
     except Exception as exc:  # bad/unpublished DOI, no network, API change
         print(f"  FAIL {session}: could not read deposit at doi:{doi} "
               f"({type(exc).__name__}: {exc})")
@@ -125,14 +226,14 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> tup
                     print(f"  SKIP {session}/raw: no raw files in this deposit.")
                     continue
                 print(f"  GET  {session}/raw: {len(raw_files)} files")
-                _fetch_into(doi, registry, raw_files, dest)
+                _fetch(kind, ctx, registry, raw_files, dest)
             else:
                 zname = zip_for[stage]
                 if zname not in registry:
                     print(f"  SKIP {session}/{stage}: {zname} not in this deposit yet.")
                     continue
                 print(f"  GET  {session}/{stage}: {zname}")
-                _fetch_into(doi, registry, [zname], CACHE)
+                _fetch(kind, ctx, registry, [zname], CACHE)
                 dest.mkdir(parents=True, exist_ok=True)
                 with zipfile.ZipFile(CACHE / zname) as z:
                     _safe_extract(z, dest)
@@ -146,7 +247,8 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> tup
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Fetch workshop data from Zenodo (local-first).")
+    ap = argparse.ArgumentParser(
+        description="Fetch workshop data from a DOI (Dataverse/Zenodo), local-first.")
     ap.add_argument("--session", default="prerecorded", choices=list(SESSIONS))
     ap.add_argument("--what", default="all", choices=list(GROUPS))
     ap.add_argument("--doi", help="override the session DOI (e.g. the live dataset published "
@@ -156,12 +258,12 @@ def main() -> int:
 
     doi = args.doi or SESSIONS.get(args.session)
     if not doi:
-        print(f"No DOI for session '{args.session}'. Publish its deposit and set "
-              f"SESSIONS['{args.session}'] in this script, or pass --doi 10.5281/zenodo.NNNNNN.")
+        print(f"No DOI for session '{args.session}'. Publish its dataset and set "
+              f"SESSIONS['{args.session}'] in this script, or pass --doi <DOI>.")
         return 1
     if "XXXXXXX" in doi:
         print(f"Session '{args.session}' has a placeholder DOI ({doi}) — its dataset "
-              f"isn't published yet.\nPass a real one with --doi 10.5281/zenodo.NNNNNN, "
+              f"isn't published yet.\nPass a real one with --doi <DOI>, "
               f"or wait for the workshop release.")
         return 1
 

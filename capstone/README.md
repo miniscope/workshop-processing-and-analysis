@@ -48,4 +48,4 @@ These are populated either by your own upstream runs or by
 
 ## TODO
 - [ ] Verify the arena config (`config/`) matches the example session (fps, arena bounds, mm scale).
-- [ ] Run end-to-end once the example data lands on Zenodo (CI smoke test).
+- [ ] Run end-to-end once the example data lands in the archive (CI smoke test).
