@@ -5,6 +5,9 @@ data/.cache/
 # Minian dask scratch (intpath / MINIAN_INTERMEDIATE) — regenerated each run.
 minian_intermediate/
 
+# CaMAP capstone output bundles — written by ds.save_bundle(), regenerated each run.
+capstone/output/
+
 # Python
 __pycache__/
 *.py[cod]

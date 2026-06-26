@@ -1,10 +1,12 @@
-"""Convert eztrack position output into the DeepLabCut CSV format CaMAP reads.
+"""Convert ezTrack position output into the position CSV CaMAP reads.
 
-eztrack (the daharoni fork, v2.x) writes a flat per-frame table with columns
+ezTrack (the daharoni fork, v2.x) writes a flat per-frame table with columns
 ``frame, x, y, detected, distance_px, ...``. CaMAP's behavior loader
-(:func:`camap.behavior._load_behavior_xy`) expects a DeepLabCut-style CSV with a
-3-row ``scorer / bodyparts / coords`` header, and selects a column by
-``(scorer, bodypart, coord)``. This converter bridges the two.
+(:func:`camap.behavior._load_behavior_xy`) expects a position CSV with a 3-row
+``scorer / bodyparts / coords`` header (the DeepLabCut on-disk layout — CaMAP
+just reuses that format; DeepLabCut itself is not part of this pipeline) and
+selects a column by ``(scorer, bodypart, coord)``. This converter bridges the
+two.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 
-def eztrack_to_dlc(
+def eztrack_to_camap(
     eztrack_csv: str | Path,
     output_csv: str | Path,
     *,
@@ -24,14 +26,14 @@ def eztrack_to_dlc(
     x_col: str = "x",
     y_col: str = "y",
 ) -> Path:
-    """Write a DeepLabCut-format CSV from an eztrack location output.
+    """Write the CaMAP-format position CSV from an ezTrack location output.
 
     Parameters
     ----------
     eztrack_csv:
-        Path to the eztrack output CSV (flat columns, e.g. ``frame, x, y``).
+        Path to the ezTrack output CSV (flat columns, e.g. ``frame, x, y``).
     output_csv:
-        Destination DLC-style CSV path.
+        Destination CSV path (the 3-row-header layout CaMAP reads).
     bodypart:
         Bodypart name to write; must match ``behavior.bodypart`` in the CaMAP
         data config.
@@ -39,7 +41,7 @@ def eztrack_to_dlc(
         Scorer name for the top header row (CaMAP infers it from the header, so
         the exact string is free).
     frame_col, x_col, y_col:
-        Column names in the eztrack CSV (the v2.x fork uses ``frame``/``x``/``y``).
+        Column names in the ezTrack CSV (the v2.x fork uses ``frame``/``x``/``y``).
 
     Returns
     -------
@@ -53,13 +55,13 @@ def eztrack_to_dlc(
     missing = [c for c in (frame_col, x_col, y_col) if c not in df.columns]
     if missing:
         raise ValueError(
-            f"eztrack CSV {eztrack_csv.name} missing column(s) {missing}. "
+            f"ezTrack CSV {eztrack_csv.name} missing column(s) {missing}. "
             f"Available: {list(df.columns)}"
         )
 
-    # CaMAP reads the DLC CSV with header=[0,1,2] and takes the first physical
-    # column as the frame index. The first column's header triple in a real DLC
-    # export is literally ('scorer', 'bodyparts', 'coords').
+    # CaMAP reads the CSV with header=[0,1,2] and takes the first physical column
+    # as the frame index. The first column's header triple is literally
+    # ('scorer', 'bodyparts', 'coords').
     out = pd.DataFrame(
         {
             ("scorer", "bodyparts", "coords"): df[frame_col].to_numpy(),
