@@ -101,7 +101,8 @@ def _dataverse_registry(server: str, doi: str) -> dict[str, dict]:
         df = entry["dataFile"]
         label = entry.get("directoryLabel")  # Dataverse folder, if any
         name = f"{label}/{df['filename']}" if label else df["filename"]
-        reg[name] = {"id": df["id"], "md5": df.get("md5", "")}
+        reg[name] = {"id": df["id"], "md5": df.get("md5", ""),
+                     "size": df.get("filesize", 0)}
     return reg
 
 
@@ -128,26 +129,51 @@ def discover(doi: str) -> tuple[str, dict, str]:
         return "pooch", dict(p.registry), doi
 
 
-def _dataverse_download(server: str, rec: dict, dest_path: Path) -> None:
-    """Stream a Dataverse datafile to *dest_path*, verifying its MD5."""
+def _human(n: float) -> str:
+    """Bytes as a short human string (e.g. ``9.4 GB``)."""
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{int(n)} B"
+        n /= 1024
+
+
+def _dataverse_download(server: str, rec: dict, dest_path: Path, label: str = "") -> None:
+    """Stream a Dataverse datafile to *dest_path*, verifying its MD5.
+
+    Prints a live, single-line progress meter (downloaded / total, %) so a
+    multi-GB raw pull doesn't look hung. *label* prefixes the line (e.g.
+    ``[3/28] 12.avi``)."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     url = f"{server}/api/access/datafile/{rec['id']}"
+    total = int(rec.get("size") or 0)
     digest = hashlib.md5()
+    done = 0
     with urllib.request.urlopen(url, timeout=_TIMEOUT) as r, open(dest_path, "wb") as out:
         for chunk in iter(lambda: r.read(_CHUNK), b""):
             out.write(chunk)
             digest.update(chunk)
+            done += len(chunk)
+            pct = f"{done / total * 100:5.1f}%" if total else "  ?  "
+            bar = f"{_human(done)}" + (f" / {_human(total)}" if total else "")
+            sys.stdout.write(f"\r       {label} {pct}  {bar}        ")
+            sys.stdout.flush()
+    sys.stdout.write("\r" + " " * 79 + "\r")  # clear the progress line
+    sys.stdout.flush()
     if rec["md5"] and digest.hexdigest() != rec["md5"]:
         dest_path.unlink(missing_ok=True)
         raise RuntimeError(f"MD5 mismatch for {dest_path.name}")
+    print(f"       {label} done ({_human(done)})")
 
 
 def _fetch(kind: str, ctx: str, registry: dict, names: list[str], dest: Path) -> None:
     """Download *names* (a subset of *registry*) into *dest*, verified by hash."""
     dest.mkdir(parents=True, exist_ok=True)
     if kind == "dataverse":
-        for n in names:
-            _dataverse_download(ctx, registry[n], dest / n)
+        total = sum(int(registry[n].get("size") or 0) for n in names)
+        if total:
+            print(f"       ({len(names)} files, {_human(total)} total)")
+        for i, n in enumerate(names, 1):
+            _dataverse_download(ctx, registry[n], dest / n, label=f"[{i}/{len(names)}] {n}")
     else:  # pooch (Zenodo/figshare/etc.)
         import pooch
 
