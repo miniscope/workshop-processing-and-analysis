@@ -25,7 +25,7 @@ behavior:
     bins: 50                # spatial bins per axis
     min_occupancy: 0.05     # min seconds per bin to be valid
     spatial_sigma: 3        # Gaussian smoothing (bins)
-    n_shuffles: 1000
+    n_shuffles: 500
     random_seed: 1
     event_threshold_sigma: 0
     p_value_threshold: 0.05

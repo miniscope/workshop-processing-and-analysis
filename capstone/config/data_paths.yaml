@@ -8,20 +8,30 @@
 neural:
   # Directory holding Minian's zarr output (C/C_lp.zarr, A.zarr, max_proj.zarr).
   path: ../../data/sessions/prerecorded/minian_out
-  # Miniscope DAQ neural timestamps (must match Minian's frame count).
-  timestamp: ../../data/sessions/prerecorded/raw/neural_timestamp.csv
+  # Neural timestamps in CaMAP schema (timestamp_first, seconds), produced from
+  # the raw Miniscope DAQ neural_timestamp.csv by workshop_glue
+  # .miniscope_timestamps_to_camap. Row count matches Minian's frame count.
+  timestamp: ../../data/sessions/prerecorded/raw/neural_timestamp_camap.csv
 
 behavior:
   type: arena
-  fps: 20.0                 # behavior camera sampling rate, Hz
-  # DeepLabCut-format position CSV produced by the eztrack->DLC glue
-  # (capstone/workshop_glue/eztrack_to_dlc.py writes position_dlc.csv).
-  position: ../../data/sessions/prerecorded/eztrack_out/position_dlc.csv
-  timestamp: ../../data/sessions/prerecorded/raw/behavior_timestamp.csv
+  fps: 46.91                # behavior camera rate, Hz (from behavior_timestamp.csv;
+                            # position.csv carries true frame numbers despite the
+                            # eztrack temporal_downsample=2, so this is the full rate)
+  # Position CSV CaMAP reads (3-row header), produced from the ezTrack output by
+  # workshop_glue.eztrack_to_camap (capstone/workshop_glue/eztrack_to_camap.py).
+  position: ../../data/sessions/prerecorded/eztrack_out/position_camap.csv
+  # Behavior timestamps in CaMAP schema (frame_index + unix_time, seconds),
+  # produced from the raw behavior_timestamp.csv by the same converter.
+  timestamp: ../../data/sessions/prerecorded/raw/behavior_timestamp_camap.csv
   bodypart: LED             # must match the bodypart written by the converter
 
-  # --- Arena calibration (TODO: set for the example session) ---
-  arena_bounds: [0, 640, 0, 480]   # (x_min, x_max, y_min, y_max) in pixels
-  arena_size_mm: [500, 500]        # physical arena (width, height) in mm
-  camera_height_mm: 500            # camera height above floor (mm)
-  tracking_height_mm: 50           # tracked-point height above floor (mm)
+  # --- Arena calibration (V4-CA1-OpenField, behavior.mp4 is 740x734 px) ---
+  arena_bounds: [0, 740, 0, 734]   # (x_min, x_max, y_min, y_max) px; animal covers the full frame
+  arena_size_mm: [300, 300]        # physical open-field interior (width, height) in mm
+  # Parallax correction disabled: camera height above the floor wasn't measured
+  # for this session. tracking_height_mm: 0 makes the correction an identity
+  # (factor = (H - h)/H = 1). The LED sits ~40 mm above the floor — set
+  # tracking_height_mm: 40 and camera_height_mm to the real height to enable it.
+  camera_height_mm: 300            # placeholder (only used by parallax; inert while h=0)
+  tracking_height_mm: 0            # 0 => no parallax correction (see note above)
