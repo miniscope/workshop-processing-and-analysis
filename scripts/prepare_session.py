@@ -1,4 +1,4 @@
-"""Prepare a raw Miniscope DAQ session for the workshop / Zenodo.
+"""Prepare a raw Miniscope DAQ session for the workshop / public archive.
 
 Takes a recording straight off the Miniscope DAQ -- a session folder with
 ``Behavior/`` and ``Miniscope/`` subdirs, each holding serially numbered AVI
@@ -16,13 +16,18 @@ and produces a clean, trimmed, space-efficient copy ready to analyze or upload:
   CNMF-E / Minian see the original pixels. Files past the cutoff are dropped; the
   boundary file is cut to the exact frame.
 
-Output mirrors the DAQ layout so downstream tools (and Zenodo upload) can
-treat it like any session::
+Output is the **flat workshop format** (one dir per session, device-prefixed
+names, no per-device subdirs) — the same layout published on the public archive
+and consumed by ``get_data.py`` / the capstone::
 
-    <out>/Behavior/behavior.mp4, timeStamps.csv, metaData.json
-    <out>/Miniscope/0.avi ... N.avi, timeStamps.csv, metaData.json
+    <out>/0.avi ... N.avi          # miniscope segments, raw (lossless trim)
+    <out>/neural_timestamp.csv     # miniscope DAQ clock
+    <out>/neural_metaData.json
+    <out>/behavior.mp4             # consolidated, trimmed, grayscale H.264
+    <out>/behavior_timestamp.csv   # behavior DAQ clock
+    <out>/behavior_metaData.json
 
-Per-device frame count of video == rows in that device's ``timeStamps.csv``, so
+Per-device frame count of video == rows in that device's ``*_timestamp.csv``, so
 frame N aligns 1:1 with row N.
 
 Requires ``ffmpeg``/``ffprobe`` on PATH (see INSTALL.md).
@@ -164,16 +169,18 @@ def encode_behavior(src_dir: Path, dest: Path, keep: int, crf: int, gop: int) ->
         listfile.unlink(missing_ok=True)
 
 
-def prepare_device(name: str, src: Path, out: Path, target_ms: float) -> tuple[int, float]:
+def prepare_device(prefix: str, src: Path, out: Path, target_ms: float) -> tuple[int, float]:
+    """Trim *src*'s timestamps + metadata into *out* as flat, device-prefixed
+    ``<prefix>_timestamp.csv`` / ``<prefix>_metaData.json`` (workshop format)."""
     ts = src / "timeStamps.csv"
     if not ts.is_file():
-        die(f"{name}: missing {ts}")
+        die(f"{prefix}: missing {ts}")
     keep, last_ms = cutoff_frames(ts, target_ms)
     out.mkdir(parents=True, exist_ok=True)
-    trim_timestamps(ts, out / "timeStamps.csv", keep)
+    trim_timestamps(ts, out / f"{prefix}_timestamp.csv", keep)
     meta = src / "metaData.json"
     if meta.is_file():
-        shutil.copy2(meta, out / "metaData.json")
+        shutil.copy2(meta, out / f"{prefix}_metaData.json")
     return keep, last_ms
 
 
@@ -200,23 +207,23 @@ def main(argv=None) -> int:
     target_ms = args.minutes * 60_000
     print(f"Preparing {session}\n  -> {out}  (first {args.minutes:g} min, behavior CRF {args.crf})")
 
-    # Miniscope: trim timestamps + losslessly trim raw video.
-    ms_keep, ms_ms = prepare_device("Miniscope", ms_src, out / "Miniscope", target_ms)
-    written = trim_miniscope(ms_src, out / "Miniscope", ms_keep)
+    # Miniscope (-> neural_*): trim timestamps + losslessly trim raw video, flat in out/.
+    ms_keep, ms_ms = prepare_device("neural", ms_src, out, target_ms)
+    written = trim_miniscope(ms_src, out, ms_keep)
     if written != ms_keep:
         die(f"Miniscope: kept {written} video frames but timestamps want {ms_keep} "
             f"(recording shorter than {args.minutes:g} min?)")
     print(f"  Miniscope: {ms_keep} frames ({ms_ms/1000:.1f}s), raw AVIs trimmed losslessly")
 
-    # Behavior: trim timestamps + consolidate/trim/compress video.
-    beh_keep, beh_ms = prepare_device("Behavior", beh_src, out / "Behavior", target_ms)
-    encode_behavior(beh_src, out / "Behavior" / "behavior.mp4", beh_keep, args.crf, args.gop)
+    # Behavior (-> behavior_*): trim timestamps + consolidate/trim/compress video, flat in out/.
+    beh_keep, beh_ms = prepare_device("behavior", beh_src, out, target_ms)
+    encode_behavior(beh_src, out / "behavior.mp4", beh_keep, args.crf, args.gop)
     eff_fps = beh_keep / (beh_ms / 1000) if beh_ms else float("nan")
     print(f"  Behavior:  {beh_keep} frames ({beh_ms/1000:.1f}s, ~{eff_fps:.1f} fps), "
           f"consolidated -> behavior.mp4 (H.264 CRF {args.crf})")
 
     print(f"\nDone. Prepared session at {out}\n"
-          f"  Next: upload this dir to Zenodo, or point tutorials at it directly.")
+          f"  Next: upload this dir to the public archive, or point tutorials at it directly.")
     return 0
 
 

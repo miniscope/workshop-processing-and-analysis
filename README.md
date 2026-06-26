@@ -52,17 +52,17 @@ data/sessions/<name>/
 ```
 
 Two sessions:
-- **`prerecorded`** — the backup dataset, always available on Zenodo.
+- **`prerecorded`** — the backup dataset, always available from the public archive.
 - **`live`** — recorded during the workshop, downloaded if that pans out.
 
 **Raw** (videos + timestamps) feeds Minian (step 2) and eztrack (step 4).
 **Processed** stages feed calab (step 3) and CaMAP (step 5) — and those inputs
 can be either *your own local output* from the upstream steps **or** the
-processed bundles **on Zenodo**. `scripts/get_data.py` resolves this
-**local-first**: each stage you already produced is kept, and only the missing
-stages are pulled from Zenodo (via `pooch`, checksummed + cached, the same way
-Minian fetches data). So whether you ran the upstream step or not, the capstone
-reads the same path.
+processed bundles **in the public archive** (UCLA Dataverse today; Zenodo too).
+`scripts/get_data.py` resolves this **local-first**: each stage you already
+produced is kept, and only the missing stages are downloaded (checksummed +
+cached). So whether you ran the upstream step or not, the capstone reads the
+same path.
 
 See [`data/README.md`](data/README.md) for the download commands and layout.
 
@@ -104,10 +104,10 @@ workshop-processing-and-analysis/
 ├── requirements.txt          # top-level deps (newest from PyPI)
 ├── requirements.lock         # full pinned freeze (verified-working set)
 ├── data/
-│   ├── README.md             # sessions, Zenodo bundles, local-first resolution
+│   ├── README.md             # sessions, archive bundles, local-first resolution
 │   └── sessions/             # data/sessions/<name>/{raw,minian_out,deconv_out,eztrack_out}
 ├── scripts/
-│   ├── get_data.py           # pooch-based Zenodo fetch (per session, local-first)
+│   ├── get_data.py           # DOI fetch from Dataverse/Zenodo (per session, local-first)
 │   └── fetch_notebooks.py    # copy each tool's bundled notebooks into tutorials/
 ├── tutorials/                # one folder per upstream tool (links + run notes)
 │   ├── overview/             # processing_overview.ipynb (the pipeline end-to-end)
