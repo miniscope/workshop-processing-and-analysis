@@ -21,6 +21,24 @@ eztrack notebooks copy --all -o tutorials/eztrack/notebooks
 Bundled: `LocationTracking_Individual` (single video) and
 `LocationTracking_BatchProcess` (many videos).
 
+## Pick the behavior video
+
+The notebooks open an in-notebook file picker, `ez.file_chooser(start_dir)`.
+eztrack's bundled default points at a demo folder (`../../PracticeVideos/`) that
+we don't ship, so the picker raises `InvalidPathError: ... does not exist`. Hand
+it a start directory that **does** exist — the workshop's raw data:
+
+```python
+fc = ez.file_chooser("../../../data/sessions/prerecorded/raw/")   # then click behavior.mp4
+fc
+```
+
+The notebooks run from `tutorials/eztrack/notebooks/`, so the repo's `data/` is
+**three** levels up. (For the live session, swap `prerecorded` → `live`.)
+Calling `ez.file_chooser()` with no argument also works — it starts at the
+notebook's own folder and you browse from there — but the picker errors on any
+start path that doesn't exist.
+
 ## Inputs / outputs
 
 | | path |
@@ -32,7 +50,7 @@ Bundled: `LocationTracking_Individual` (single video) and
 
 eztrack writes a **flat** CSV (`frame, x, y, ...`), but CaMAP expects a
 **DeepLabCut-style** CSV (3-row scorer/bodypart/coord header). The capstone glue
-`capstone/workshop_glue/eztrack_to_dlc.py` converts between them — a good
+`capstone/workshop_glue/eztrack_to_camap.py` converts between them — a good
 teaching moment about position-format conventions.
 
 ## TODO
