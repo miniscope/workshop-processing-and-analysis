@@ -71,9 +71,18 @@ they want.
 python scripts/get_data.py                              # prerecorded, all stages
 python scripts/get_data.py --what raw                   # just the raw recording (feeds Minian + eztrack)
 python scripts/get_data.py --what processed             # minian_out + deconv_out + eztrack_out
+python scripts/get_data.py --what minian_out            # a single processed stage
 python scripts/get_data.py --session live --doi <DOI>                  # the workshop recording
 python scripts/get_data.py --force                      # re-download even if local data exists
 ```
+
+`--what` takes a **group** (`raw`, `processed`, `all`) **or a single stage name**
+(`minian_out`, `deconv_out`, `eztrack_out`). Single-stage is for when you
+produced the other stages yourself — e.g. you tracked behavior in eztrack but
+want the canonical Minian output: `--what minian_out` pulls only that, and
+nothing downloads as a zip you have to open — each stage extracts straight into
+`data/sessions/<session>/<stage>/`, ready to use (the downloaded zip is kept in
+`data/.cache/` only to avoid re-downloading).
 
 ## Local-first resolution
 
@@ -102,10 +111,11 @@ neural timestamp file must have the same frame count as Minian's `C.zarr`.
       (`SESSIONS["prerecorded"]` = `10.25346/S6SGHPCZ`, UCLA Dataverse). Filenames
       + checksums are read from the DOI — nothing else to fill.
 - [x] Smoke-test `get_data.py` against the real DOI (resolves + downloads, MD5-verified).
-- [ ] Build + upload the processed bundles as `minian_out.zip`, `deconv_out.zip`,
+- [x] Build + upload the processed bundles as `minian_out.zip`, `deconv_out.zip`,
       `eztrack_out.zip` (each zip's **contents at the top level**, no wrapping
-      folder, so they extract straight into the stage dir) — **after** the capstone
-      notebook verifies the full pipeline.
+      folder, so they extract straight into the stage dir). Done — uploaded to the
+      `prerecorded` deposit (double-zipped so Dataverse keeps each `*_out.zip`
+      intact) and verified to download + extract via `get_data.py --what processed`.
 - [ ] Live: after the workshop recording, run `prepare_session.py` and upload to
       the archive, then hand participants the DOI for `--session live --doi …`
       (or set `SESSIONS["live"]`).

@@ -42,8 +42,14 @@ Examples
     python scripts/get_data.py                          # prerecorded, all stages
     python scripts/get_data.py --what raw               # just the raw recording
     python scripts/get_data.py --what processed         # minian+deconv+eztrack outputs
+    python scripts/get_data.py --what minian_out        # a single processed stage
     python scripts/get_data.py --session live --doi ... # the workshop recording
     python scripts/get_data.py --force                  # re-download even if present
+
+``--what`` accepts a group (``raw`` / ``processed`` / ``all``) or a single stage
+name (``minian_out`` / ``deconv_out`` / ``eztrack_out``). Pulling one stage is
+handy when you produced the others yourself — e.g. you tracked behavior in
+eztrack but want the canonical Minian output: ``--what minian_out``.
 """
 
 from __future__ import annotations
@@ -63,7 +69,15 @@ CACHE = REPO_ROOT / "data" / ".cache"
 
 PROCESSED = ["minian_out", "deconv_out", "eztrack_out"]
 STAGE_KEYS = ["raw", *PROCESSED]
-GROUPS = {"raw": ["raw"], "processed": PROCESSED, "all": STAGE_KEYS}
+# --what accepts a group (all/raw/processed) or a single stage name. The
+# per-stage keys map to a one-element list, so you can pull just one stage
+# (e.g. --what minian_out) when you produced the others yourself.
+GROUPS = {
+    "all": STAGE_KEYS,
+    "raw": ["raw"],
+    "processed": PROCESSED,
+    **{stage: [stage] for stage in PROCESSED},
+}
 
 _TIMEOUT = 60  # seconds, per request
 _CHUNK = 1 << 20  # 1 MiB streaming chunk
@@ -250,7 +264,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Fetch workshop data from a DOI (Dataverse/Zenodo), local-first.")
     ap.add_argument("--session", default="prerecorded", choices=list(SESSIONS))
-    ap.add_argument("--what", default="all", choices=list(GROUPS))
+    ap.add_argument("--what", default="all", choices=list(GROUPS),
+                    help="a group (all/raw/processed) or a single stage "
+                         "(minian_out/deconv_out/eztrack_out)")
     ap.add_argument("--doi", help="override the session DOI (e.g. the live dataset published "
                                    "during the workshop)")
     ap.add_argument("--force", action="store_true", help="re-download even if local data exists")
