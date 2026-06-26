@@ -48,10 +48,11 @@ raw/
 └── neural_metaData.json
 ```
 
-The miniscope segments keep the modern DAQ names (`0.avi`, `1.avi`, ...). Minian's
-default file pattern is `msCam[0-9]+\.avi`, so point it at `raw/` with
-`MINIAN_FILE_PATTERN=[0-9]+\.avi$` (the videos then load and `behavior.mp4` is
-ignored). For the example session the behavior camera ran at **~47 fps**, not 20 —
+The miniscope segments keep the modern DAQ names (`0.avi`, `1.avi`, ...). The
+workshop Minian notebook defaults `dpath` to this `raw/` dir and uses the file
+pattern `[0-9]+\.avi$` out of the box, so the `.avi` segments load and
+`behavior.mp4` is ignored (override with `MINIAN_FILE_PATTERN` if your videos are
+named differently). For the example session the behavior camera ran at **~47 fps**, not 20 —
 set the fps accordingly in eztrack and `capstone/config/data_paths.yaml`.
 
 ## Two sessions
