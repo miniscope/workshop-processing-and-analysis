@@ -92,6 +92,17 @@ python -m pip install -r requirements.txt          # newest from PyPI
 Your prompt should now show `(.venv)`. Re-activate (the `activate` line above) in
 each new terminal.
 
+> **Windows — "running scripts is disabled on this system"?** A clean Windows
+> machine blocks PowerShell scripts by default, so `Activate.ps1` won't run.
+> Allow local scripts for your user once, then re-run the activate line:
+>
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+> ```
+>
+> (Or skip activation and call the venv directly, e.g. `.venv\Scripts\python.exe -m pip ...`,
+> or use Command Prompt with `.venv\Scripts\activate.bat`.)
+
 ## Step 3 — Register the kernel and fetch content
 
 ```bash
