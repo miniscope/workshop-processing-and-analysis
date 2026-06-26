@@ -94,7 +94,7 @@ matplotlib==3.11.0
 mdit-py-plugins==0.6.1
 mdurl==0.1.2
 mediapy==1.2.6
-minian==2.0.0
+minian==2.0.1
 minisim==1.0.3
 mistune==3.3.2
 msgpack==1.2.1

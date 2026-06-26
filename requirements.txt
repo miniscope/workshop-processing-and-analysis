@@ -1,7 +1,7 @@
 # Workshop processing & analysis — top-level dependencies (newest from PyPI).
 #
 # Verified to resolve + install + import together in one Python 3.12 venv
-# (Minian 2.0.0 shares CaMAP's modern numpy/zarr/xarray, so no conflict).
+# (Minian 2.0.1 shares CaMAP's modern numpy/zarr/xarray, so no conflict).
 # For a reproducible, known-good set use requirements.lock instead.
 #
 # Prerequisites NOT installed by pip (see INSTALL.md):

@@ -97,7 +97,7 @@ minian notebooks copy --all -o tutorials/minian/notebooks
 ```
 
 `--all` pulls whatever the installed Minian ships — no fixed list. The released
-`minian 2.0.0` bundles the **pipeline** and **cross-registration** notebooks; a
+`minian 2.0.1` bundles the **pipeline** and **cross-registration** notebooks; a
 **groundtruth pipeline** notebook is picked up automatically once it's in the
 installed version.
 
