@@ -90,7 +90,3 @@ activity trace must match the neural frame count.
 (If you instead deconvolve *inside* CaMAP, drop tuned OASIS params into the
 analysis config's `neural.oasis` block and call `ds.deconvolve()` — but that's
 not the path this workshop teaches.)
-
-## TODO
-- [ ] Confirm `--fs` and the `C` vs `C_lp` trace name for the example session.
-- [ ] Confirm CaDecon's row order matches Minian `C` (the inject asserts this).

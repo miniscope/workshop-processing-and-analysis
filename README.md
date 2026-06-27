@@ -53,7 +53,11 @@ data/sessions/<name>/
 
 Two sessions:
 - **`prerecorded`** — the backup dataset, always available from the public archive.
-- **`live`** — recorded during the workshop, downloaded if that pans out.
+  This is what `get_data.py` fetches by default, so the workshop runs start to
+  finish even without a live recording.
+- **`live`** — recorded during the workshop and published partway through. The
+  organizer hands you a DOI (or asks you to `git pull`) on day 2 — see
+  [Getting the live recording](data/README.md#getting-the-live-recording-day-2).
 
 **Raw** (videos + timestamps) feeds Minian (step 2) and eztrack (step 4).
 **Processed** stages feed calab (step 3) and CaMAP (step 5) — and those inputs
@@ -82,6 +86,10 @@ python scripts/fetch_notebooks.py
 python scripts/get_data.py
 ```
 
+The workshop's **own** recording (the `live` session) is published mid-workshop;
+grab it on day 2 with the one-line command in
+[Getting the live recording](data/README.md#getting-the-live-recording-day-2).
+
 Each tool ships its teaching notebooks inside its package; `fetch_notebooks.py`
 copies them out (version-matched to what's installed) so participants find them
 right next to each module's README. They're regenerated, not committed.
@@ -101,6 +109,7 @@ Then open the module you're on under [`tutorials/`](tutorials/) or [`capstone/`]
 workshop-processing-and-analysis/
 ├── README.md                 # this file
 ├── INSTALL.md                # venv setup + prerequisites (ffmpeg)
+├── ORGANIZER.md              # organizer-only prep checklist (not for participants)
 ├── requirements.txt          # top-level deps (newest from PyPI)
 ├── requirements.lock         # full pinned freeze (verified-working set)
 ├── data/

@@ -22,7 +22,7 @@ happened upstream (calab), so CaMAP's built-in OASIS is bypassed.
 
 ## Glue (`workshop_glue/`)
 
-- `eztrack_to_dlc.py` — converts eztrack's flat `frame,x,y` CSV into the
+- `eztrack_to_camap.py` — converts eztrack's flat `frame,x,y` CSV into the
   DeepLabCut-style CSV CaMAP reads. **Fully implemented.**
 - `deconv_inject.py` — loads `deconv_out/activity.npy` (calab CaTune/CaDecon
   output), aligns rows with `ds.traces` unit ids, and injects into
@@ -45,7 +45,3 @@ All under the active session, `data/sessions/<session>/` (default `prerecorded`)
 
 These are populated either by your own upstream runs or by
 `python scripts/get_data.py` (local-first — see `data/README.md`).
-
-## TODO
-- [ ] Verify the arena config (`config/`) matches the example session (fps, arena bounds, mm scale).
-- [ ] Run end-to-end once the example data lands in the archive (CI smoke test).

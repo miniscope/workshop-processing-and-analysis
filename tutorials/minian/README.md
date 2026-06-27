@@ -97,7 +97,7 @@ minian notebooks copy --all -o tutorials/minian/notebooks
 ```
 
 `--all` pulls whatever the installed Minian ships — no fixed list. The released
-`minian 2.0.1` bundles the **pipeline** and **cross-registration** notebooks; a
+`minian 2.0.2` bundles the **pipeline** and **cross-registration** notebooks; a
 **groundtruth pipeline** notebook is picked up automatically once it's in the
 installed version.
 
@@ -113,8 +113,3 @@ its own example session (see `data/README.md`).
 
 These zarr stores are exactly what CaMAP reads in the capstone (dims `(unit_id, frame)`).
 `C.zarr` (the un-deconvolved `YrA`) is what the deconvolution stage consumes.
-
-## TODO
-- [ ] Confirm `C.zarr` dim order / coords load cleanly in CaMAP and calab on real data.
-- [ ] Ensure `A.zarr` has valid unique `unit_id` coords (CaMAP disables the footprint overlay otherwise).
-- [ ] Point `dpath` at the workshop session's raw video (defaults to Minian's bundled demo).

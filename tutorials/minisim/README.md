@@ -39,6 +39,3 @@ Production tools (expose every knob to *make usable simulated data*):
 > minisim *generates* its recordings from code, so these notebooks need no data
 > download. The `build_recording` notebook is a good way to produce a
 > simulated session to practice the downstream tools on.
-
-## TODO
-- [ ] Decide the running order in the agenda (training ladder first, then studio).
