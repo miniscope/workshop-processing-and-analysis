@@ -33,8 +33,21 @@ is bypassed.
 
 ## Run
 
+Two equivalent front-ends, same calab calls and same output — use whichever you
+prefer:
+
+- **Notebook** (`deconvolution.ipynb`) — the interactive companion. Both tools
+  in one notebook, each with an *explore* path (open the hosted app, simulate
+  in-browser, no data) and a *your-data* path (send your Minian `C` traces over
+  the bridge and save `activity.npy`). Recommended for the workshop, and it keeps
+  the whole pipeline in Jupyter. `tune()` returns the tuned params straight back
+  to the notebook, so CaTune doesn't need the export-download-rerun dance the
+  script does.
+- **Scripts** (`run_cadecon.py` / `run_catune.py`) — headless front-end for
+  batch/non-interactive regeneration (used by `prepare_session.py`).
+
 calab works on a `.npy` of calcium traces and the browser apps return the
-deconvolved activity. Two thin wrapper scripts handle the session plumbing
+deconvolved activity. The wrapper scripts handle the session plumbing
 (Minian → `.npy` → browser → `deconv_out/activity.npy`):
 
 ```bash
@@ -53,9 +66,11 @@ python tutorials/deconvolution/run_catune.py --session prerecorded \
 Both write `data/sessions/<session>/deconv_out/activity.npy` (shape
 `(n_cells, n_frames)`, rows aligned to the Minian `C` order).
 
-Under the hood they call the `calab` CLI: `convert -f minian` (→ `.npy`),
-then `tune` + `deconvolve`, or `cadecon`. calab ships **no notebooks** (web UI /
-CLI), so it's not part of `fetch_notebooks.py`.
+Under the hood the scripts call the `calab` CLI (`convert -f minian` → `.npy`,
+then `tune` + `deconvolve`, or `cadecon`); the notebook calls calab's Python API
+(`load_minian`, `tune`, `decon`, …) directly. calab *upstream* ships **no
+notebooks**, so it's not part of `fetch_notebooks.py` — `deconvolution.ipynb`
+here is workshop-authored and committed (like the CaMAP capstone notebook).
 
 ## Inputs / outputs
 

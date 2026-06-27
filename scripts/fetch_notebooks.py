@@ -14,8 +14,9 @@ Re-running refreshes the copies (each destination is cleared first). The fetched
 folders are gitignored — they are generated, not committed.
 
 Notes:
-- calab (CaTune / CaDecon) ships no notebooks; it is launched (`calab tune` /
-  `calab cadecon`) — see tutorials/deconvolution/README.md.
+- calab (CaTune / CaDecon) ships no notebooks upstream. The workshop's
+  deconvolution notebook (tutorials/deconvolution/deconvolution.ipynb) is
+  authored in the repo, not fetched — see tutorials/deconvolution/README.md.
 - The CaMAP capstone notebook lives in the repo (capstone/), not upstream.
 """
 
@@ -64,7 +65,8 @@ def main() -> int:
     print("Fetching teaching notebooks into tutorials/<tool>/notebooks/ ...")
     ok = sum(fetch(*t) for t in TOOLS)
     print(f"\n{ok}/{len(TOOLS)} tools fetched. Open them with: jupyter lab")
-    print("calab (CaTune/CaDecon) has no notebooks - launch with `calab tune` / `calab cadecon`.")
+    print("calab (CaTune/CaDecon): use tutorials/deconvolution/deconvolution.ipynb "
+          "(authored in-repo) or `calab tune` / `calab cadecon`.")
     return 0 if ok == len(TOOLS) else 1
 
 
