@@ -85,6 +85,31 @@ nothing downloads as a zip you have to open — each stage extracts straight int
 `data/sessions/<session>/<stage>/`, ready to use (the downloaded zip is kept in
 `data/.cache/` only to avoid re-downloading).
 
+## Getting the live recording (day 2)
+
+The `prerecorded` session is already published, so `python scripts/get_data.py`
+just works from day one. The **live** session is the recording made *during* the
+workshop, so it's published partway through. To get it, the organizer will hand
+you **one** of these — you only do the one you're told:
+
+- **A DOI to paste** — run this once (replace `<DOI>` with the string given):
+
+  ```bash
+  python scripts/get_data.py --session live --doi <DOI>
+  ```
+
+- **"Pull the repo"** — if the organizer baked the DOI into the repo instead,
+  update your copy and then fetch with no DOI needed:
+
+  ```bash
+  git pull
+  python scripts/get_data.py --session live
+  ```
+
+Either way the data lands in `data/sessions/live/`, and every notebook works the
+same once you point it at the `live` session (set `SESSION = "live"` in the
+notebook's first cell, or swap `prerecorded` → `live` in the path).
+
 ## Local-first resolution
 
 Each stage is a separate bundle, fetched **local-first**:
@@ -107,16 +132,4 @@ capstone doesn't care which.
 `match_events()` needs them to align behavior onto the neural clock, and the
 neural timestamp file must have the same frame count as Minian's `C.zarr`.
 
-## TODO before the workshop
-- [x] Publish the `prerecorded` deposit and set its DOI in `scripts/get_data.py`
-      (`SESSIONS["prerecorded"]` = `10.25346/S6SGHPCZ`, UCLA Dataverse). Filenames
-      + checksums are read from the DOI — nothing else to fill.
-- [x] Smoke-test `get_data.py` against the real DOI (resolves + downloads, MD5-verified).
-- [x] Build + upload the processed bundles as `minian_out.zip`, `deconv_out.zip`,
-      `eztrack_out.zip` (each zip's **contents at the top level**, no wrapping
-      folder, so they extract straight into the stage dir). Done — uploaded to the
-      `prerecorded` deposit (double-zipped so Dataverse keeps each `*_out.zip`
-      intact) and verified to download + extract via `get_data.py --what processed`.
-- [ ] Live: after the workshop recording, run `prepare_session.py` and upload to
-      the archive, then hand participants the DOI for `--session live --doi …`
-      (or set `SESSIONS["live"]`).
+Organizer prep and pending tasks live in [`ORGANIZER.md`](../ORGANIZER.md).
