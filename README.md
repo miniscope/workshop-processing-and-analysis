@@ -130,4 +130,9 @@ workshop-processing-and-analysis/
 
 ## License
 
-TBD — add a LICENSE file. Note that CaMAP itself is AGPL-3.0.
+Copyright (c) 2026 Aharoni Lab. Licensed under **AGPL-3.0** — see [LICENSE](LICENSE).
+
+This matches CaMAP (also AGPL-3.0) and is compatible with the other tools in the
+pipeline: minian, minisim, and eztrack are GPL-3.0-or-later (GPLv3 and AGPLv3 are
+explicitly combinable), and calab is MIT (permissive). AGPL-3.0 is the most
+restrictive of the set, so it's the safe umbrella for the combined workshop.
