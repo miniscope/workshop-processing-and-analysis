@@ -27,20 +27,20 @@ came from.
 
 ## Minian — [`tutorials/minian/README.md`](tutorials/minian/README.md)
 
-- [ ] Confirm `C.zarr` dim order / coords load cleanly in CaMAP and calab on real data.
-- [ ] Ensure `A.zarr` has valid unique `unit_id` coords (CaMAP disables the footprint overlay otherwise).
-- [ ] Point `dpath` at the workshop session's raw video (defaults to Minian's bundled demo).
+- [x] Confirm `C.zarr` dim order / coords load cleanly in CaMAP and calab on real data.
+- [x] Ensure `A.zarr` has valid unique `unit_id` coords (CaMAP disables the footprint overlay otherwise).
+- [x] Point `dpath` at the workshop session's raw video (defaults to Minian's bundled demo).
 
 ## Deconvolution — [`tutorials/deconvolution/README.md`](tutorials/deconvolution/README.md)
 
-- [ ] Confirm `--fs` and the `C` vs `C_lp` trace name for the example session.
-- [ ] Confirm CaDecon's row order matches Minian `C` (the inject asserts this).
+- [x] Confirm `--fs` and the `C` vs `C_lp` trace name for the example session.
+- [x] Confirm CaDecon's row order matches Minian `C` (the inject asserts this).
 
 ## eztrack — [`tutorials/eztrack/README.md`](tutorials/eztrack/README.md)
 
-- [ ] Confirm which eztrack export the example session uses (raw track vs scaled).
+- [x] Confirm which eztrack export the example session uses (raw track vs scaled).
 
 ## Capstone — [`capstone/README.md`](capstone/README.md)
 
-- [ ] Verify the arena config (`config/`) matches the example session (fps, arena bounds, mm scale).
-- [ ] Run end-to-end once the example data lands in the archive (CI smoke test).
+- [x] Verify the arena config (`config/`) matches the example session (fps, arena bounds, mm scale).
+- [x] Run end-to-end once the example data lands in the archive (CI smoke test).
