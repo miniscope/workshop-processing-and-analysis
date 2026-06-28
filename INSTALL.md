@@ -76,20 +76,38 @@ Verify: `ffmpeg -version`
 
 ## Step 1 — Get the workshop
 
+A fresh terminal opens in your **home folder** (Windows: `C:\Users\<you>`,
+macOS: `/Users/<you>`, Linux: `/home/<you>`). `git clone` creates a
+`workshop-processing-and-analysis` folder **right there**, and `cd` moves you
+into it:
+
 ```bash
 git clone https://github.com/miniscope/workshop-processing-and-analysis.git
 cd workshop-processing-and-analysis
 ```
 
+Run **every** later command from inside this folder. To confirm you're in it:
+`ls` (Windows: `dir`) should list `README.md`, `requirements.lock`, and
+`scripts/`. Opened a new terminal? `cd` back first — `cd ~/workshop-processing-and-analysis`
+(Windows PowerShell: `cd $HOME\workshop-processing-and-analysis`).
+
+> **Prefer it somewhere else** (e.g. Documents)? `cd` there *before* cloning:
+> `cd ~/Documents` (Windows: `cd $HOME\Documents`), then run the clone.
+
 ## Step 2 — Create the environment and install
 
 ```bash
-# create the virtual environment
-python -m venv .venv          # Windows, if needed: py -3.12 -m venv .venv
+# create the virtual environment — name the 3.11–3.13 interpreter EXPLICITLY
+# (the Python you create it with becomes the venv's Python permanently)
+py -3.12 -m venv .venv         # Windows  (the 'py' launcher selects the version)
+python3.12 -m venv .venv       # macOS/Linux
 
 # activate it
+.venv\Scripts\Activate.ps1     # Windows PowerShell  (cmd: .venv\Scripts\activate.bat)
 source .venv/bin/activate      # macOS/Linux
-.venv\Scripts\Activate.ps1     # Windows PowerShell
+
+# confirm the venv is 3.11–3.13 BEFORE installing (this is the #1 install failure)
+python --version               # must say 3.11.x, 3.12.x, or 3.13.x
 
 # install everything (this is a large scientific stack — expect ~5-10 min)
 python -m pip install --upgrade pip
@@ -101,6 +119,20 @@ python -m pip install -r requirements.lock         # pinned, reproducible (recom
 > **Which file?** `requirements.lock` is the exact, known-good set the workshop
 > room runs — use it. `requirements.txt` is unpinned (newest from PyPI) and is
 > mainly for maintainers checking upstream drift.
+
+> **Have several Pythons installed?** Common, and the usual cause of the
+> `camap[notebook]` install error. The version you build the venv with is the one
+> it keeps — so name it explicitly rather than relying on bare `python`:
+> - **List what you have** — Windows: `py --list`; macOS/Linux: `ls /usr/bin/python3* /usr/local/bin/python3* 2>/dev/null` (or `which -a python3.12`).
+> - **Build the venv with a 3.11–3.13 one** — `py -3.12 -m venv .venv` (Windows) /
+>   `python3.12 -m venv .venv` (macOS/Linux). If 3.12 isn't listed, install it
+>   (Step 0) first.
+> - **If you already made the venv with the wrong Python**, delete and recreate it:
+>   `Remove-Item -Recurse -Force .venv` (PowerShell) / `rm -rf .venv` (macOS/Linux),
+>   then rebuild with the explicit interpreter above.
+>
+> Once the venv is **activated**, plain `python`/`pip` correctly mean the venv's —
+> you only need the version-specific name to *create* it.
 
 Your prompt should now show `(.venv)`. Re-activate (the `activate` line above) in
 each new terminal.
