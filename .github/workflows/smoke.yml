@@ -52,15 +52,6 @@ jobs:
   smoke:
     needs: validate
     runs-on: ubuntu-latest
-    strategy:
-      # Test both dependency sets; let each report independently rather than
-      # one cancelling the other:
-      #   requirements.lock — the reproducible set the workshop room runs on
-      #   requirements.txt  — newest from PyPI, so upstream drift surfaces early
-      fail-fast: false
-      matrix:
-        deps: [requirements.lock, requirements.txt]
-    name: smoke (${{ matrix.deps }})
     steps:
       - uses: actions/checkout@v4
 
@@ -68,22 +59,44 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: ${{ matrix.deps }}
+          cache-dependency-path: requirements.txt
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Install dependencies (${{ matrix.deps }})
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r ${{ matrix.deps }}
+          python -m pip install -r requirements.txt
+          # requirements.lock is a Windows-generated freeze (it pins pywinpty)
+          # and won't install on the Linux runner — regenerate it cross-platform
+          # before gating CI on it.
 
       - name: Register the workshop Jupyter kernel
         # Mirrors INSTALL.md step 3 — the capstone notebook is pinned to this kernel.
         run: python -m ipykernel install --user --name workshop --display-name "Workshop"
 
-      - name: Fetch prerecorded session data
-        run: python scripts/get_data.py --session prerecorded
+      # The capstone reads the processed stages + raw timestamps, never the raw
+      # videos — so --skip-video pulls ~228 MB instead of the full 8.9 GB deposit.
+      # Cache it so the fetch only hits the archive when get_data.py changes.
+      - name: Cache prerecorded session data
+        uses: actions/cache@v4
+        with:
+          path: data/sessions/prerecorded
+          key: data-prerecorded-novideo-${{ hashFiles('scripts/get_data.py') }}-v1
+
+      - name: Fetch prerecorded session data (no video)
+        run: python scripts/get_data.py --session prerecorded --skip-video
+
+      # The per-unit spatial-information shuffle test dominates runtime
+      # (~20-50 min at the committed n_shuffles=500). A smoke run only needs the
+      # pipeline to execute end-to-end, not full statistical power — drop it to
+      # 50 here. The committed default (what participants run) is untouched.
+      - name: Trim shuffle count for the smoke run
+        run: |
+          sed -i -E 's/^( *n_shuffles:).*/\1 50  # lowered for CI smoke/' \
+            capstone/config/arena_config.yaml
+          grep -n n_shuffles capstone/config/arena_config.yaml
 
       - name: Execute capstone notebook
         run: |

@@ -82,6 +82,12 @@ GROUPS = {
 _TIMEOUT = 60  # seconds, per request
 _CHUNK = 1 << 20  # 1 MiB streaming chunk
 
+# Raw video file types. With --skip-video these are left in the deposit and only
+# the small raw files (timestamps, metadata) are pulled — enough for the capstone
+# and any processed-only run, which never open the videos. The videos are only
+# needed to *run* Minian (step 2) / eztrack (step 4) yourself.
+_VIDEO_EXTS = {".avi", ".mp4", ".mkv", ".mov"}
+
 # One dataset (DOI) per session; we read filenames + hashes from the DOI itself.
 # Fill a DOI once its dataset is published. The live dataset's DOI is usually
 # passed at workshop time via --doi rather than committed here.
@@ -209,7 +215,8 @@ def _safe_extract(z: zipfile.ZipFile, dest: Path) -> None:
     z.extractall(dest)
 
 
-def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> tuple[int, int]:
+def fetch_session(session: str, doi: str, stages: list[str], force: bool,
+                  skip_video: bool = False) -> tuple[int, int]:
     """Fetch the requested *stages* of *session*.
 
     Returns ``(present, failed)``: how many stages are available afterward, and
@@ -236,11 +243,18 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool) -> tup
             continue
         try:
             if stage == "raw":
-                if not raw_files:
-                    print(f"  SKIP {session}/raw: no raw files in this deposit.")
+                files = raw_files
+                if skip_video:
+                    files = [f for f in files
+                             if Path(f).suffix.lower() not in _VIDEO_EXTS]
+                if not files:
+                    why = ("only video in this deposit (skipped)" if skip_video and raw_files
+                           else "no raw files in this deposit")
+                    print(f"  SKIP {session}/raw: {why}.")
                     continue
-                print(f"  GET  {session}/raw: {len(raw_files)} files")
-                _fetch(kind, ctx, registry, raw_files, dest)
+                note = "  (timestamps/metadata only; skipping video)" if skip_video else ""
+                print(f"  GET  {session}/raw: {len(files)} files{note}")
+                _fetch(kind, ctx, registry, files, dest)
             else:
                 zname = zip_for[stage]
                 if zname not in registry:
@@ -270,6 +284,10 @@ def main() -> int:
     ap.add_argument("--doi", help="override the session DOI (e.g. the live dataset published "
                                    "during the workshop)")
     ap.add_argument("--force", action="store_true", help="re-download even if local data exists")
+    ap.add_argument("--skip-video", action="store_true",
+                    help="when fetching raw, skip the large video files (.avi/.mp4) and "
+                         "grab only timestamps + metadata — enough for the capstone and any "
+                         "processed-only run (the videos are only needed to run Minian/eztrack)")
     args = ap.parse_args()
 
     doi = args.doi or SESSIONS.get(args.session)
@@ -286,7 +304,7 @@ def main() -> int:
     stages = GROUPS[args.what]
     print(f"Fetching session '{args.session}' from doi:{doi} "
           f"({args.what}: {', '.join(stages)}) ...")
-    ok, failed = fetch_session(args.session, doi, stages, args.force)
+    ok, failed = fetch_session(args.session, doi, stages, args.force, args.skip_video)
     print(f"\n{ok}/{len(stages)} stage(s) available under data/sessions/{args.session}/")
     return 1 if failed else 0
 
