@@ -22,7 +22,16 @@ You need three things that pip cannot install for you: **Python**, **git**, and
 
 ### Python 3.11–3.13
 
-CaMAP requires Python in this range; 3.12 is recommended.
+CaMAP requires Python in this range; 3.12 is recommended. **3.14 (the current
+newest) and 3.10-or-older will NOT work** — grab 3.12 specifically, not "the
+latest."
+
+> **Symptom of the wrong version:** if `pip install` ends with
+> `No matching distribution found for camap[notebook]` and a line like
+> `Ignored the following versions that require a different python version`,
+> your Python is outside 3.11–3.13 (almost always 3.14 too new, or 3.10 too
+> old). Check with `python --version` and rebuild the venv with 3.12 (below).
+> `scripts/verify.py` flags this up front.
 
 - **Windows:** `winget install Python.Python.3.12`
   (or download from [python.org](https://www.python.org/downloads/) and **check
