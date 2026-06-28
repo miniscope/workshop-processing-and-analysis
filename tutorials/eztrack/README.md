@@ -10,8 +10,9 @@ Installed from the fork via `pip install git+https://github.com/daharoni/ezTrack
 
 ## Get the notebooks
 
-`scripts/fetch_notebooks.py` copies eztrack's bundled notebooks into
-`tutorials/eztrack/notebooks/`. To (re)fetch just eztrack:
+eztrack's teaching notebooks are already committed under
+`tutorials/eztrack/notebooks/`. `scripts/fetch_notebooks.py` optionally refreshes
+them to your installed eztrack. To (re)fetch just eztrack:
 
 ```bash
 eztrack notebooks list                                 # see what's available

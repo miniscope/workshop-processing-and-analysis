@@ -3,10 +3,8 @@
 
 Validates that every committed .ipynb is well-formed nbformat — a cheap gate
 that catches a corrupted or hand-edited notebook in seconds, without spinning
-up the full scientific stack the capstone smoke test needs.
-
-Skips fetched tutorial notebooks (tutorials/*/notebooks/), which are generated
-by scripts/fetch_notebooks.py and not committed.
+up the full scientific stack the capstone smoke test needs. This includes the
+vendored teaching notebooks under tutorials/<tool>/notebooks/.
 """
 
 from __future__ import annotations
@@ -26,9 +24,8 @@ def iter_notebooks() -> list[Path]:
         rel_parts = set(path.relative_to(REPO_ROOT).parts)
         if rel_parts & SKIP_DIRS:
             continue
-        # tutorials/<tool>/notebooks/ is fetched, not committed
-        if "notebooks" in path.parts and "tutorials" in path.parts:
-            continue
+        # The teaching notebooks under tutorials/<tool>/notebooks/ are now
+        # vendored and committed, so they're validated too.
         notebooks.append(path)
     return sorted(notebooks)
 

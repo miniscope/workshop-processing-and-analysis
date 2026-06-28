@@ -9,8 +9,9 @@ the workshop.
 
 ## Get the notebooks
 
-`scripts/fetch_notebooks.py` (run once from the repo root) copies minisim's
-bundled notebooks into `tutorials/minisim/notebooks/`. To (re)fetch just minisim:
+minisim's teaching notebooks are already committed under
+`tutorials/minisim/notebooks/`. `scripts/fetch_notebooks.py` optionally refreshes
+them to your installed minisim. To (re)fetch just minisim:
 
 ```bash
 minisim-notebooks list                                   # see what's available

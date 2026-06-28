@@ -4,6 +4,22 @@ Pre-workshop prep and open verification items, collected here so the
 participant-facing READMEs stay clean. Each item links back to the module it
 came from.
 
+## Participant install — pre-flight gate
+
+Make a passing self-check a **prerequisite**, so broken setups surface days early
+over email — not in a time-boxed room where one stuck laptop blocks everyone.
+
+- [ ] Send the install link ([INSTALL.md](INSTALL.md)) with a deadline (e.g. 2
+      days out): clone → `pip install -r requirements.lock` → register the
+      `workshop` kernel → `python scripts/get_data.py` → **`python scripts/verify.py`**,
+      and reply with the output (or an all-`PASS` screenshot).
+- [ ] Triage anyone who's red over email or a pre-workshop office hour.
+- [ ] **Dry-run the full install on a clean machine of each OS family** you expect
+      (Windows, macOS Apple-Silicon, macOS Intel, Linux). The lock is verified on
+      Linux by CI but is **untested on macOS/ARM** — this dry run, not CI, is the
+      real cross-OS guarantee. If a pinned package has no wheel on some platform,
+      patch `requirements.lock` (env marker) before sending instructions.
+
 ## Data & archive — [`data/README.md`](data/README.md)
 
 - [x] Publish the `prerecorded` deposit and set its DOI in `scripts/get_data.py`
