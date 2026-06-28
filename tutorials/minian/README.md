@@ -88,8 +88,9 @@ the stream go quiet and the save finish in seconds.
 
 ## Get the notebooks
 
-`scripts/fetch_notebooks.py` copies Minian's bundled notebooks into
-`tutorials/minian/notebooks/`. To (re)fetch just Minian:
+Minian's teaching notebooks are already committed under
+`tutorials/minian/notebooks/`. `scripts/fetch_notebooks.py` optionally refreshes
+them to your installed Minian. To (re)fetch just Minian:
 
 ```bash
 minian notebooks list                                  # see what's available

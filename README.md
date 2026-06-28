@@ -79,20 +79,23 @@ bare machine? [INSTALL.md](INSTALL.md) walks through installing all three per OS
 git clone https://github.com/miniscope/workshop-processing-and-analysis.git
 cd workshop-processing-and-analysis
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt           # see INSTALL.md for the pinned lock
-# pull each tool's teaching notebooks into tutorials/<tool>/notebooks/
-python scripts/fetch_notebooks.py
-# fetch the workshop data (default: the prerecorded backup session, all stages)
-python scripts/get_data.py
+python -m pip install -r requirements.lock          # pinned, reproducible (see INSTALL.md)
+python -m ipykernel install --user --name workshop --display-name "Workshop"
+python scripts/get_data.py                          # prerecorded backup session (all stages)
+python scripts/verify.py                            # confirm the install before the workshop
 ```
+
+Run `python scripts/verify.py` and aim for an all-`PASS` result **before the
+workshop** — see [INSTALL.md](INSTALL.md) for the full step-by-step.
 
 The workshop's **own** recording (the `live` session) is published mid-workshop;
 grab it on day 2 with the one-line command in
 [Getting the live recording](data/README.md#getting-the-live-recording-day-2).
 
-Each tool ships its teaching notebooks inside its package; `fetch_notebooks.py`
-copies them out (version-matched to what's installed) so participants find them
-right next to each module's README. They're regenerated, not committed.
+Each tool's teaching notebooks are **committed** under `tutorials/<tool>/notebooks/`,
+so they're there on clone. `python scripts/fetch_notebooks.py` is an optional,
+non-destructive refresh that re-pulls them version-matched to your installed
+tools (see each folder's `PROVENANCE.md`).
 
 Then open the module you're on under [`tutorials/`](tutorials/) or [`capstone/`](capstone/).
 
@@ -110,15 +113,16 @@ workshop-processing-and-analysis/
 ├── README.md                 # this file
 ├── INSTALL.md                # venv setup + prerequisites (ffmpeg)
 ├── ORGANIZER.md              # organizer-only prep checklist (not for participants)
-├── requirements.txt          # top-level deps (newest from PyPI)
-├── requirements.lock         # full pinned freeze (verified-working set)
+├── requirements.lock         # full pinned freeze (verified-working set) — use this
+├── requirements.txt          # top-level deps (newest from PyPI) — maintainers/fallback
 ├── data/
 │   ├── README.md             # sessions, archive bundles, local-first resolution
 │   └── sessions/             # data/sessions/<name>/{raw,minian_out,deconv_out,eztrack_out}
 ├── scripts/
 │   ├── get_data.py           # DOI fetch from Dataverse/Zenodo (per session, local-first)
-│   └── fetch_notebooks.py    # copy each tool's bundled notebooks into tutorials/
-├── tutorials/                # one folder per upstream tool (links + run notes)
+│   ├── fetch_notebooks.py    # optional refresh of the committed per-tool notebooks
+│   └── verify.py             # pre-flight self-check (run before the workshop)
+├── tutorials/                # one folder per upstream tool (committed teaching notebooks)
 │   ├── overview/             # processing_overview.ipynb (the pipeline end-to-end)
 │   ├── minisim/
 │   ├── minian/

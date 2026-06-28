@@ -22,7 +22,16 @@ You need three things that pip cannot install for you: **Python**, **git**, and
 
 ### Python 3.11–3.13
 
-CaMAP requires Python in this range; 3.12 is recommended.
+CaMAP requires Python in this range; 3.12 is recommended. **3.14 (the current
+newest) and 3.10-or-older will NOT work** — grab 3.12 specifically, not "the
+latest."
+
+> **Symptom of the wrong version:** if `pip install` ends with
+> `No matching distribution found for camap[notebook]` and a line like
+> `Ignored the following versions that require a different python version`,
+> your Python is outside 3.11–3.13 (almost always 3.14 too new, or 3.10 too
+> old). Check with `python --version` and rebuild the venv with 3.12 (below).
+> `scripts/verify.py` flags this up front.
 
 - **Windows:** `winget install Python.Python.3.12`
   (or download from [python.org](https://www.python.org/downloads/) and **check
@@ -84,10 +93,14 @@ source .venv/bin/activate      # macOS/Linux
 
 # install everything (this is a large scientific stack — expect ~5-10 min)
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt          # newest from PyPI
-# or, for the reproducible known-good set:
-# python -m pip install -r requirements.lock
+python -m pip install -r requirements.lock         # pinned, reproducible (recommended for the workshop)
+# if the lock ever fails to install on your platform, fall back to newest-from-PyPI
+# and let the organizers know:  python -m pip install -r requirements.txt
 ```
+
+> **Which file?** `requirements.lock` is the exact, known-good set the workshop
+> room runs — use it. `requirements.txt` is unpinned (newest from PyPI) and is
+> mainly for maintainers checking upstream drift.
 
 Your prompt should now show `(.venv)`. Re-activate (the `activate` line above) in
 each new terminal.
@@ -107,9 +120,30 @@ each new terminal.
 
 ```bash
 python -m ipykernel install --user --name workshop --display-name "Workshop"
-python scripts/fetch_notebooks.py                  # tool notebooks -> tutorials/<tool>/notebooks/
 python scripts/get_data.py                         # prerecorded session data (all stages)
+python scripts/fetch_notebooks.py                  # OPTIONAL: refresh tool notebooks to your installed versions
 ```
+
+The teaching notebooks for each tool are **already committed** under
+`tutorials/<tool>/notebooks/`, so they're present the moment you clone — you
+don't need to fetch anything for them to exist. `fetch_notebooks.py` is an
+optional refresh that pulls copies matching your installed versions; it's
+non-destructive, so if it can't run it simply leaves the committed copies in
+place. (`get_data.py` defaults to all stages, ~8.9 GB incl. raw video; if you're
+only running the capstone, `--skip-video` pulls ~228 MB instead.)
+
+## Step 4 — Verify your install
+
+Run the self-check — it confirms every step above actually worked and tells you
+exactly what to fix if not:
+
+```bash
+python scripts/verify.py
+```
+
+You want an all-`PASS` run (a `WARN` is usually fine). **Do this before the
+workshop** and send the output to the organizers if anything is red — a broken
+setup is easy to fix days early and painful to fix in the room.
 
 Then launch Jupyter and pick the **Workshop** kernel:
 
@@ -130,11 +164,12 @@ jupyter lab
 
 ## newest vs. pinned
 
-- `requirements.txt` — top-level packages, **unpinned** (pulls newest). Good
-  during development.
-- `requirements.lock` — a **full pinned freeze** of a verified-working set.
-  Switch the workshop to this once development locks in, so the room is
-  reproducible. The CI smoke test flags drift in the meantime.
+- `requirements.lock` — a **full pinned freeze** of the verified-working set, and
+  what the workshop room runs. Cross-platform (pywinpty is marked Windows-only)
+  and exercised end-to-end by the CI smoke test. **Use this.**
+- `requirements.txt` — top-level packages, **unpinned** (pulls newest). For
+  maintainers checking upstream drift, or as a fallback if the lock won't install
+  on your platform.
 
 ## Verify the capstone runs
 
@@ -155,4 +190,7 @@ jupyter nbconvert --to notebook --execute --inplace \
 - **oasis-deconv** is optional and intentionally left out — the workshop does
   deconvolution in calab and bypasses CaMAP's built-in OASIS.
 - Some teaching notebooks need a tool's notebook extras (e.g. `minisim[notebook]`);
-  these are already in `requirements.txt`.
+  these are already in `requirements.lock` / `requirements.txt`.
+- The per-tool teaching notebooks are **committed** under `tutorials/<tool>/notebooks/`
+  (see each folder's `PROVENANCE.md`). `scripts/fetch_notebooks.py` refreshes them
+  to your installed versions but is optional and non-destructive.

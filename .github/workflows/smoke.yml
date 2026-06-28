@@ -5,10 +5,11 @@ name: capstone-smoke
 #   validate — fast (~30s): every committed notebook is well-formed and every
 #              script/glue module byte-compiles. Catches a corrupted notebook
 #              or a syntax error without waiting on the heavy stack.
-#   smoke    — full: install the workshop env, register the `workshop` kernel,
-#              fetch the prerecorded session, and run the capstone notebook
-#              headless. Catches a broken install or upstream API drift in CI
-#              rather than in front of the workshop room.
+#   smoke    — full: install the pinned lock, register the `workshop` kernel,
+#              refresh the per-tool teaching notebooks (catches upstream
+#              notebook-CLI drift), fetch the prerecorded session, and run the
+#              capstone notebook headless. Catches a broken install or upstream
+#              API drift in CI rather than in front of the workshop room.
 #
 # Docs-only commits (**.md, LICENSE) are skipped — they can't break either gate.
 
@@ -59,22 +60,29 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install dependencies
+        # Install the pinned lock — the reproducible set the workshop room runs.
+        # pywinpty is marked win32-only so the lock installs cleanly on Linux.
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          # requirements.lock is a Windows-generated freeze (it pins pywinpty)
-          # and won't install on the Linux runner — regenerate it cross-platform
-          # before gating CI on it.
+          python -m pip install -r requirements.lock
 
       - name: Register the workshop Jupyter kernel
         # Mirrors INSTALL.md step 3 — the capstone notebook is pinned to this kernel.
         run: python -m ipykernel install --user --name workshop --display-name "Workshop"
+
+      # Refresh the teaching notebooks from the installed wheels. They're also
+      # committed (so the room has them on clone), but running the fetch here is
+      # what catches upstream notebook-CLI drift: fetch_notebooks.py exits nonzero
+      # if any tool fails to produce at least one notebook, turning a silent
+      # in-room failure into a red build.
+      - name: Refresh teaching notebooks (minisim / minian / eztrack)
+        run: python scripts/fetch_notebooks.py
 
       # The capstone reads the processed stages + raw timestamps, never the raw
       # videos — so --skip-video pulls ~228 MB instead of the full 8.9 GB deposit.
