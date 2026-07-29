@@ -20,6 +20,25 @@ venv with no conflicts.
 You need three things that pip cannot install for you: **Python**, **git**, and
 **ffmpeg**. (pip and `venv` come bundled with Python.)
 
+> **macOS — install Homebrew first.** Every `brew` command below needs it, and a
+> fresh Mac doesn't have it. Run this in **Terminal directly** (it prompts you
+> interactively, so it can't be pasted into another tool):
+>
+> ```bash
+> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+> ```
+>
+> It asks for your login password because it needs **administrator rights**. If
+> it stops with `Need sudo access on macOS` your account isn't an admin — that's
+> common on lab or managed machines. Either ask whoever administers it, or skip
+> Homebrew entirely and use the [python.org installer](https://www.python.org/downloads/)
+> plus a prebuilt [ffmpeg binary](https://ffmpeg.org/download.html#build-mac)
+> (git comes from `xcode-select --install`, which needs no admin rights).
+>
+> When it finishes it may print a `Next steps` block asking you to add `brew` to
+> your PATH — run those two commands, then **open a new terminal** so `brew` is
+> found.
+
 ### Python 3.11–3.13
 
 CaMAP requires Python in this range; 3.12 is recommended. **3.14 (the current
