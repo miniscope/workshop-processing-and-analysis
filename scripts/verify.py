@@ -4,11 +4,16 @@ Run this AFTER following INSTALL.md, with the workshop venv active:
 
     python scripts/verify.py
 
-It does not install or download anything - it just checks that each install
-step actually worked and prints one PASS / FAIL / WARN per check, with the exact
-command to fix anything that's red. Send the output (or a screenshot of an
-all-PASS run) to the organizers before the workshop so a broken setup is found
-days early, not in the room.
+It does not install anything and downloads no data - it just checks that each
+install step actually worked and prints one PASS / FAIL / WARN per check, with
+the exact command to fix anything that's red. Send the output (or a screenshot
+of an all-PASS run) to the organizers before the workshop so a broken setup is
+found days early, not in the room.
+
+One check reaches the network: the raw recording is audited against the
+archive's published file list (names and sizes only - metadata, not data), so an
+interrupted download can't pass as a finished one. With no connection that check
+reports WARN and everything else still runs.
 
 Exit code is 0 only if every required check passed.
 """
@@ -34,6 +39,9 @@ TOOLS = {
 
 # Teaching-notebook dirs that must hold at least one .ipynb.
 NOTEBOOK_DIRS = ["minisim", "minian", "eztrack"]
+
+# Raw video, which a deliberate `get_data.py --skip-video` pull leaves out.
+_VIDEO_EXTS = {".avi", ".mp4"}
 
 # Files the capstone needs from the prerecorded session.
 SESSION = REPO_ROOT / "data" / "sessions" / "prerecorded"
@@ -117,6 +125,62 @@ def check_notebooks() -> None:
                "" if n else "python scripts/fetch_notebooks.py  (committed copies should already be present - check your clone).")
 
 
+def check_raw_complete() -> None:
+    """Audit the local ``raw/`` against the archive's file list.
+
+    ``check_data`` only asks whether the stage dirs are non-empty, which a
+    half-finished download satisfies — so on its own it would greenlight a
+    truncated recording and let the failure surface later, mid-notebook. This
+    compares what's on disk against what the deposit publishes (names + sizes;
+    no file contents read, no data downloaded). Offline it degrades to a WARN
+    rather than failing the gate.
+    """
+    raw = SESSION / "raw"
+    if not _nonempty_dir(raw):
+        record("WARN", "raw recording complete",
+               "No raw data yet - needed for Minian (step 2) and eztrack (step 4): "
+               "python scripts/get_data.py --what raw")
+        return
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    try:
+        import get_data
+
+        missing, damaged = get_data.raw_audit("prerecorded")
+    except Exception as exc:
+        record("WARN", "raw recording complete (unverified)",
+               f"Could not read the archive's file list ({type(exc).__name__}) - offline? "
+               f"Local files are present but completeness could not be confirmed.")
+        return
+
+    def _some(names: list[str]) -> str:
+        return ", ".join(names[:3]) + (" ..." if len(names) > 3 else "")
+
+    if damaged:
+        record("FAIL", f"raw recording complete ({len(damaged)} file(s) wrong size)",
+               f"Truncated: {_some(damaged)}. Re-run `python scripts/get_data.py --what raw` "
+               f"- it re-fetches only the damaged files.")
+        return
+
+    videos = [n for n in missing if Path(n).suffix.lower() in _VIDEO_EXTS]
+    others = [n for n in missing if n not in set(videos)]
+    if others:
+        record("FAIL", f"raw recording complete ({len(others)} file(s) missing)",
+               f"Missing: {_some(others)}. Run: python scripts/get_data.py --what raw")
+    elif videos and not any(p.suffix.lower() in _VIDEO_EXTS for p in raw.iterdir()):
+        # No video at all locally: a deliberate --skip-video pull. Fine for the
+        # capstone, so not a failure - just say what it does not cover.
+        record("PASS", "raw recording complete (timestamps only - video skipped)",
+               "Enough for the capstone. To run Minian/eztrack on real video: "
+               "python scripts/get_data.py --what raw")
+    elif videos:
+        record("WARN", f"raw recording complete ({len(videos)} video(s) missing)",
+               f"Some video present but not all - an interrupted pull. Missing: {_some(videos)}. "
+               f"Re-run: python scripts/get_data.py --what raw")
+    else:
+        record("PASS", "raw recording complete (all files match the archive)")
+
+
 def check_data() -> None:
     missing = [p for p in DATA_INPUTS
                if not (_nonempty_dir(p) if p.suffix == "" else p.exists())]
@@ -132,7 +196,7 @@ def main() -> int:
     print("Workshop install self-check\n" + "=" * 27)
     print(f"repo: {REPO_ROOT}\npython: {sys.executable}\n")
     for check in (check_python, check_venv, check_ffmpeg, check_tools,
-                  check_kernel, check_notebooks, check_data):
+                  check_kernel, check_notebooks, check_data, check_raw_complete):
         try:
             check()
         except Exception as exc:  # never let the checker itself crash the gate
