@@ -32,6 +32,11 @@ The fetch is **local-first**: a stage you already produced (by running the
 upstream step) is kept, and only missing stages are downloaded. A stage that
 isn't in the deposit yet is simply skipped.
 
+It also **resumes**: within ``raw``, each file is checked against the archive's
+size and MD5, so an interrupted multi-GB pull re-fetches only what's missing or
+half-written. Re-running after a dropped connection is safe and cheap — it will
+not mistake a partial download for a complete one.
+
 The **live** dataset is published *during* the workshop, so its DOI isn't baked
 in — pass it at fetch time with ``--doi`` (no code edit, no ``git pull``):
 
@@ -157,6 +162,43 @@ def _human(n: float) -> str:
         n /= 1024
 
 
+def _md5(path: Path) -> str:
+    """MD5 of *path*, read in chunks (files here run to hundreds of MB)."""
+    h = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(_CHUNK), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _size_ok(path: Path, rec: dict) -> bool:
+    """True if *path* exists and matches the size the archive published.
+
+    Cheap (a ``stat``, no reading) and catches the truncated-by-Ctrl-C case,
+    which is how an interrupted download actually fails.
+    """
+    if not path.is_file():
+        return False
+    want_size = int(rec.get("size") or 0)
+    return path.stat().st_size == want_size if want_size else True
+
+
+def _is_complete(path: Path, rec: dict) -> bool:
+    """True if *path* already holds the archive's copy of *rec*.
+
+    Size first, then the MD5 the archive published — which also catches the
+    right-length-but-wrong-bytes case. Without this, a file left half-written by
+    an interrupted run is indistinguishable from a finished one.
+    """
+    if not _size_ok(path, rec):
+        return False
+    want_md5 = rec.get("md5")
+    if want_md5:
+        return _md5(path) == want_md5
+    # No hash published — size is all we can go on.
+    return bool(int(rec.get("size") or 0))
+
+
 def _dataverse_download(server: str, rec: dict, dest_path: Path, label: str = "") -> None:
     """Stream a Dataverse datafile to *dest_path*, verifying its MD5.
 
@@ -185,10 +227,27 @@ def _dataverse_download(server: str, rec: dict, dest_path: Path, label: str = ""
     print(f"       {label} done ({_human(done)})")
 
 
-def _fetch(kind: str, ctx: str, registry: dict, names: list[str], dest: Path) -> None:
-    """Download *names* (a subset of *registry*) into *dest*, verified by hash."""
+def _fetch(kind: str, ctx: str, registry: dict, names: list[str], dest: Path,
+           force: bool = False) -> None:
+    """Download *names* (a subset of *registry*) into *dest*, verified by hash.
+
+    Files already present and matching the archive (size + MD5) are skipped, so
+    an interrupted pull resumes where it left off instead of starting over —
+    only what's missing or truncated is re-fetched. ``force`` re-downloads
+    everything regardless.
+    """
     dest.mkdir(parents=True, exist_ok=True)
     if kind == "dataverse":
+        if not force:
+            local = [n for n in names if (dest / n).is_file()]
+            if local:
+                print(f"       verifying {len(local)} local file(s) ...")
+                have = {n for n in local if _is_complete(dest / n, registry[n])}
+                if have:
+                    print(f"       {len(have)} already complete - skipping.")
+                names = [n for n in names if n not in have]
+                if not names:
+                    return
         total = sum(int(registry[n].get("size") or 0) for n in names)
         if total:
             print(f"       ({len(names)} files, {_human(total)} total)")
@@ -215,6 +274,44 @@ def _safe_extract(z: zipfile.ZipFile, dest: Path) -> None:
     z.extractall(dest)
 
 
+def raw_audit(session: str, doi: str | None = None, deep: bool = False,
+              ) -> tuple[list[str], list[str]]:
+    """Compare a session's local ``raw/`` against the archive's file list.
+
+    Returns ``(missing, damaged)``: names the deposit has that aren't on disk,
+    and names whose local copy doesn't match what was published. The default
+    checks presence and size — what an interrupted download breaks — and reads
+    no file contents; *deep* also verifies every MD5 (reads every byte, so
+    roughly 10 s per 10 GB).
+
+    Only the file *list* is fetched, never the data, so this is cheap enough for
+    a pre-flight check. Raises if the deposit can't be read (offline, bad DOI)
+    so callers can degrade to local-only checks instead of reporting a failure.
+    """
+    doi = doi or SESSIONS.get(session)
+    if not doi:
+        raise ValueError(f"no DOI known for session {session!r}")
+    kind, registry, _ctx = discover(doi)
+    zips = {f"{st}.zip" for st in PROCESSED}
+    raw_dir = DATA_ROOT / session / "raw"
+    check = _is_complete if deep else _size_ok
+
+    missing: list[str] = []
+    damaged: list[str] = []
+    for name, rec in registry.items():
+        if name in zips:
+            continue
+        path = raw_dir / name
+        if not path.is_file():
+            missing.append(name)
+        elif isinstance(rec, dict) and not check(path, rec):
+            # pooch registries carry only a hash string, so non-Dataverse
+            # deposits are audited for presence alone — pooch itself
+            # hash-verifies each file as it downloads.
+            damaged.append(name)
+    return sorted(missing), sorted(damaged)
+
+
 def fetch_session(session: str, doi: str, stages: list[str], force: bool,
                   skip_video: bool = False) -> tuple[int, int]:
     """Fetch the requested *stages* of *session*.
@@ -237,7 +334,14 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool,
     ok = failed = 0
     for stage in stages:
         dest = DATA_ROOT / session / stage
-        if _nonempty(dest) and not force:
+        # `raw` comes from the archive file-by-file, so its completeness is
+        # verifiable against the registry — fall through and let _fetch skip the
+        # files we already have and re-pull only what's missing or truncated. A
+        # blanket "dir is non-empty -> KEEP" here would mistake an interrupted
+        # pull for a finished one and leave the session quietly incomplete.
+        # Processed stages stay coarse: a local dir there may be your own
+        # upstream output (that's the point of local-first), so we keep it.
+        if stage != "raw" and _nonempty(dest) and not force:
             print(f"  KEEP {session}/{stage}: local data present (use --force to re-download).")
             ok += 1
             continue
@@ -254,14 +358,14 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool,
                     continue
                 note = "  (timestamps/metadata only; skipping video)" if skip_video else ""
                 print(f"  GET  {session}/raw: {len(files)} files{note}")
-                _fetch(kind, ctx, registry, files, dest)
+                _fetch(kind, ctx, registry, files, dest, force=force)
             else:
                 zname = zip_for[stage]
                 if zname not in registry:
                     print(f"  SKIP {session}/{stage}: {zname} not in this deposit yet.")
                     continue
                 print(f"  GET  {session}/{stage}: {zname}")
-                _fetch(kind, ctx, registry, [zname], CACHE)
+                _fetch(kind, ctx, registry, [zname], CACHE, force=force)
                 dest.mkdir(parents=True, exist_ok=True)
                 with zipfile.ZipFile(CACHE / zname) as z:
                     _safe_extract(z, dest)
