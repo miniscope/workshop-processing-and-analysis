@@ -75,6 +75,18 @@ See [`data/README.md`](data/README.md) for the download commands and layout.
 Prerequisites: **Python 3.11–3.13**, **git**, and **ffmpeg**. Starting from a
 bare machine? [INSTALL.md](INSTALL.md) walks through installing all three per OS.
 
+For Windows:
+```bash
+git clone https://github.com/miniscope/workshop-processing-and-analysis.git
+cd workshop-processing-and-analysis
+python -m venv .venv && .venv\Scripts\Activate.ps1   # Mac: source .venv/bin/activate
+python -m pip install -r requirements.lock          # pinned, reproducible (see INSTALL.md)
+python -m ipykernel install --user --name workshop --display-name "Workshop"
+python scripts/get_data.py                          # prerecorded backup session (all stages)
+python scripts/verify.py                            # confirm the install before the workshop
+```
+
+For Mac:
 ```bash
 git clone https://github.com/miniscope/workshop-processing-and-analysis.git
 cd workshop-processing-and-analysis
