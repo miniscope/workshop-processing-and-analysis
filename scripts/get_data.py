@@ -55,6 +55,21 @@ Examples
 name (``minian_out`` / ``deconv_out`` / ``eztrack_out``). Pulling one stage is
 handy when you produced the others yourself — e.g. you tracked behavior in
 eztrack but want the canonical Minian output: ``--what minian_out``.
+
+Restoring a stage you broke
+---------------------------
+``--restore`` puts a processed stage back to the archive's canonical copy — the
+"undo my run" path for when an interrupted or misconfigured step leaves output
+that breaks the notebooks downstream::
+
+    python scripts/get_data.py --restore                    # all processed stages
+    python scripts/get_data.py --restore --what minian_out  # just Minian's output
+
+Unlike ``--force``, this **empties the stage dir before extracting**, so nothing
+from the broken run survives. It also reuses the bundle already sitting in
+``data/.cache/`` when it matches what the archive published — the very first
+``get_data.py`` run puts it there — so a restore is usually instant and needs no
+network at all. Add ``--force`` to distrust the cache and re-download the bundle.
 """
 
 from __future__ import annotations
@@ -62,6 +77,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import sys
 import urllib.request
 import zipfile
@@ -274,6 +290,72 @@ def _safe_extract(z: zipfile.ZipFile, dest: Path) -> None:
     z.extractall(dest)
 
 
+def _clear_stage(dest: Path) -> None:
+    """Empty *dest* so a bundle can be extracted into a clean directory.
+
+    A restore has to *replace*, not overlay. ``extractall`` only overwrites the
+    entries the bundle names and leaves everything else alone, so unpacking the
+    canonical output on top of a half-finished run keeps that run's orphans. A
+    ``.zarr`` store is a directory of chunk files, so a stray chunk is read back
+    as real data — quieter, and worse, than the breakage we're recovering from.
+    """
+    # Guard the destructive part: this must be exactly a
+    # data/sessions/<name>/<stage> dir, never a parent of one.
+    root = DATA_ROOT.resolve()
+    resolved = dest.resolve()
+    if not resolved.is_relative_to(root) or len(resolved.relative_to(root).parts) != 2:
+        raise RuntimeError(f"refusing to clear {dest} - not a stage dir under {DATA_ROOT}")
+    if resolved.exists():
+        shutil.rmtree(resolved)
+    resolved.mkdir(parents=True)
+
+
+def _bundle_path(session: str, stage: str) -> Path:
+    """Where *session*'s ``<stage>.zip`` is cached.
+
+    Scoped by session because every session publishes its bundles under the
+    *same* names: in a flat cache, one session's ``minian_out.zip`` can be
+    restored into another session's stage dir. With the archive up the checksum
+    catches that; offline nothing does — and offline is exactly when a restore
+    leans on the cache hardest.
+    """
+    return CACHE / session / f"{stage}.zip"
+
+
+def _migrate_flat_cache() -> None:
+    """Move pre-session-scoped bundles (``.cache/<stage>.zip``) under ``prerecorded/``.
+
+    The flat layout predates the per-session cache, and ``prerecorded`` was the
+    only published deposit for as long as it was in use — so that is whose
+    bundles these are. Moving them beats re-downloading: they run to hundreds of
+    MB, and they are precisely what a restore needs.
+    """
+    for stage in PROCESSED:
+        legacy = CACHE / f"{stage}.zip"
+        dest = _bundle_path("prerecorded", stage)
+        if not legacy.is_file() or dest.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        legacy.rename(dest)
+        print(f"  (cached {stage}.zip moved to data/.cache/prerecorded/)")
+
+
+def _cached_bundle(session: str, stage: str, rec: dict | None) -> Path | None:
+    """The cached bundle for *session*/*stage*, if we have one worth trusting.
+
+    *rec* is the archive's registry entry (size + MD5) when we could reach the
+    deposit, and ``None`` when we couldn't. Offline we take the cached bundle
+    as-is: it is this session's by construction, and the only way it got here
+    was passing this very check on the way in.
+    """
+    bundle = _bundle_path(session, stage)
+    if not bundle.is_file():
+        return None
+    if rec is None:
+        return bundle
+    return bundle if _is_complete(bundle, rec) else None
+
+
 def raw_audit(session: str, doi: str | None = None, deep: bool = False,
               ) -> tuple[list[str], list[str]]:
     """Compare a session's local ``raw/`` against the archive's file list.
@@ -328,6 +410,7 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool,
               f"({type(exc).__name__}: {exc})")
         return 0, len(stages)
 
+    _migrate_flat_cache()
     zip_for = {st: f"{st}.zip" for st in PROCESSED}
     raw_files = [f for f in registry if f not in set(zip_for.values())]
 
@@ -342,7 +425,8 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool,
         # Processed stages stay coarse: a local dir there may be your own
         # upstream output (that's the point of local-first), so we keep it.
         if stage != "raw" and _nonempty(dest) and not force:
-            print(f"  KEEP {session}/{stage}: local data present (use --force to re-download).")
+            print(f"  KEEP {session}/{stage}: local data present "
+                  f"(--force to re-download; --restore to replace a broken run).")
             ok += 1
             continue
         try:
@@ -365,9 +449,9 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool,
                     print(f"  SKIP {session}/{stage}: {zname} not in this deposit yet.")
                     continue
                 print(f"  GET  {session}/{stage}: {zname}")
-                _fetch(kind, ctx, registry, [zname], CACHE, force=force)
+                _fetch(kind, ctx, registry, [zname], CACHE / session, force=force)
                 dest.mkdir(parents=True, exist_ok=True)
-                with zipfile.ZipFile(CACHE / zname) as z:
+                with zipfile.ZipFile(_bundle_path(session, stage)) as z:
                     _safe_extract(z, dest)
         except Exception as exc:
             print(f"  FAIL {session}/{stage}: {type(exc).__name__}: {exc}")
@@ -378,21 +462,116 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool,
     return ok, failed
 
 
+def restore_session(session: str, stages: list[str], doi: str | None = None,
+                    force: bool = False) -> tuple[int, int]:
+    """Put processed *stages* of *session* back to the archive's canonical copy.
+
+    The recovery path: empty the stage dir and rebuild it from the bundle the
+    archive published, so a participant whose run went sideways ends up
+    byte-identical to everyone else and the downstream notebooks open again.
+
+    The bundle is reused from ``data/.cache/`` whenever it matches what the
+    archive published, which is the normal case — the first ``get_data.py`` run
+    already cached it. That makes a restore quick and fully offline, which
+    matters most in exactly the situation it's for: a room full of people on one
+    network. ``force`` distrusts the cache and re-downloads instead.
+
+    Returns ``(restored, failed)``.
+    """
+    _migrate_flat_cache()
+    doi = doi or SESSIONS.get(session)
+    kind = ctx = None
+    registry: dict | None = None
+    if doi:
+        try:
+            kind, registry, ctx = discover(doi)
+        except Exception as exc:
+            print(f"  NOTE archive unreachable ({type(exc).__name__}) - "
+                  f"restoring from the local cache alone.")
+    else:
+        print(f"  NOTE no DOI for session '{session}' - "
+              f"restoring from the local cache alone.")
+
+    restored = failed = 0
+    for stage in stages:
+        if stage == "raw":
+            # raw is published file-by-file, so there's no bundle to restore
+            # from - and it needs none: a plain fetch already checks every raw
+            # file against the archive and re-pulls whatever is missing or
+            # truncated. Point people at that rather than silently doing nothing.
+            print("  SKIP raw: not a bundle - re-run without --restore to repair raw files.")
+            continue
+
+        zname = f"{stage}.zip"
+        rec = registry.get(zname) if registry is not None else None
+        if registry is not None and rec is None:
+            print(f"  SKIP {session}/{stage}: {zname} not in this deposit.")
+            continue
+
+        bundle = None if force else _cached_bundle(session, stage, rec)
+        try:
+            if bundle is None:
+                if registry is None:
+                    print(f"  FAIL {session}/{stage}: no usable cached {zname} and the "
+                          f"archive is unreachable - reconnect and retry.")
+                    failed += 1
+                    continue
+                why = "forced" if force else "not cached"
+                print(f"  GET  {session}/{stage}: {zname} ({why})")
+                _fetch(kind, ctx, registry, [zname], CACHE / session, force=True)
+                bundle = _bundle_path(session, stage)
+            else:
+                print(f"  USE  {session}/{stage}: cached {zname}"
+                      f"{'' if rec else ' (unverified - archive unreachable)'}")
+
+            dest = DATA_ROOT / session / stage
+            _clear_stage(dest)
+            with zipfile.ZipFile(bundle) as z:
+                _safe_extract(z, dest)
+        except Exception as exc:
+            print(f"  FAIL {session}/{stage}: {type(exc).__name__}: {exc}")
+            failed += 1
+            continue
+        print(f"       -> restored data/sessions/{session}/{stage}/")
+        restored += 1
+    return restored, failed
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Fetch workshop data from a DOI (Dataverse/Zenodo), local-first.")
     ap.add_argument("--session", default="prerecorded", choices=list(SESSIONS))
-    ap.add_argument("--what", default="all", choices=list(GROUPS),
+    ap.add_argument("--what", default=None, choices=list(GROUPS),
                     help="a group (all/raw/processed) or a single stage "
-                         "(minian_out/deconv_out/eztrack_out)")
+                         "(minian_out/deconv_out/eztrack_out). Defaults to 'all', "
+                         "or to 'processed' with --restore")
     ap.add_argument("--doi", help="override the session DOI (e.g. the live dataset published "
                                    "during the workshop)")
     ap.add_argument("--force", action="store_true", help="re-download even if local data exists")
+    ap.add_argument("--restore", action="store_true",
+                    help="put processed stage(s) back to the archive's copy: empty the stage "
+                         "dir and re-extract the published bundle, so nothing from a broken "
+                         "run survives. Reuses the bundle in data/.cache/ when it matches, so "
+                         "this is usually instant and works offline. Use this when your own "
+                         "output breaks the notebooks downstream; add --force to re-download "
+                         "the bundle instead of trusting the cache")
     ap.add_argument("--skip-video", action="store_true",
                     help="when fetching raw, skip the large video files (.avi/.mp4) and "
                          "grab only timestamps + metadata — enough for the capstone and any "
                          "processed-only run (the videos are only needed to run Minian/eztrack)")
     args = ap.parse_args()
+
+    what = args.what or ("processed" if args.restore else "all")
+    stages = GROUPS[what]
+
+    if args.restore:
+        # Deliberately ahead of the DOI checks below: a cache-backed restore is
+        # the whole point and must work with no DOI and no network.
+        print(f"Restoring session '{args.session}' ({what}: {', '.join(stages)}) "
+              f"to the archive's copy ...")
+        ok, failed = restore_session(args.session, stages, args.doi, args.force)
+        print(f"\n{ok} stage(s) restored under data/sessions/{args.session}/")
+        return 1 if failed else 0
 
     doi = args.doi or SESSIONS.get(args.session)
     if not doi:
@@ -405,9 +584,8 @@ def main() -> int:
               f"or wait for the workshop release.")
         return 1
 
-    stages = GROUPS[args.what]
     print(f"Fetching session '{args.session}' from doi:{doi} "
-          f"({args.what}: {', '.join(stages)}) ...")
+          f"({what}: {', '.join(stages)}) ...")
     ok, failed = fetch_session(args.session, doi, stages, args.force, args.skip_video)
     print(f"\n{ok}/{len(stages)} stage(s) available under data/sessions/{args.session}/")
     return 1 if failed else 0
