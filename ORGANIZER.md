@@ -31,6 +31,20 @@ over email — not in a time-boxed room where one stuck laptop blocks everyone.
       folder, so they extract straight into the stage dir). Done — uploaded to the
       `prerecorded` deposit (double-zipped so Dataverse keeps each `*_out.zip`
       intact) and verified to download + extract via `get_data.py --what processed`.
+- [ ] **Archive downloads are currently broken.** Every file in the `prerecorded`
+      deposit returns `404 Failed to locate and/or open physical file` from
+      `dataverse.ucla.edu/api/access/datafile/<id>` (all 33 files, all three
+      dataset versions; the whole-dataset zip 500s). The metadata API is fine —
+      file list and checksums resolve — so this is storage-side, not our code.
+      **File a ticket with UCLA Dataverse support and re-test before the
+      workshop**; until it's fixed, `get_data.py` cannot fetch anything from
+      that DOI and participants depend entirely on data they already pulled.
+- [x] **Recovery lever for a participant who breaks a stage:**
+      `python scripts/get_data.py --restore --what minian_out` wipes the stage
+      and re-extracts the published bundle from `data/.cache/` — instant and
+      offline, since the first `get_data.py` run caches the zips. Worth
+      demoing once at the start of the Minian block. See
+      [Restoring a stage you broke](data/README.md#restoring-a-stage-you-broke).
 - [ ] **Live session:** after the workshop recording, run `prepare_session.py` and
       upload to the archive, then either hand participants the DOI for
       `--session live --doi …`, or set `SESSIONS["live"]` in `scripts/get_data.py`

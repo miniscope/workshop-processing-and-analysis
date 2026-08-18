@@ -66,7 +66,9 @@ processed bundles **in the public archive** (UCLA Dataverse today; Zenodo too).
 `scripts/get_data.py` resolves this **local-first**: each stage you already
 produced is kept, and only the missing stages are downloaded (checksummed +
 cached). So whether you ran the upstream step or not, the capstone reads the
-same path.
+same path. And if a step of your own goes wrong and breaks what comes after it,
+`--restore` puts that stage back to the archive's copy from the local cache —
+see [Restoring a stage you broke](data/README.md#restoring-a-stage-you-broke).
 
 See [`data/README.md`](data/README.md) for the download commands and layout.
 

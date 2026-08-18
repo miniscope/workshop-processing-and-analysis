@@ -22,7 +22,8 @@ data/
 │   │   ├── deconv_out/       # calab output    (deconvolved neural activity) — step 3
 │   │   └── eztrack_out/      # eztrack output  (position CSV)                — step 4
 │   └── live/                 # recorded during the workshop, if it pans out
-└── .cache/                   # download cache (zips)
+└── .cache/<session>/         # bundle cache: one <stage>.zip per processed stage
+                              # (kept per session — the bundles share filenames)
 ```
 
 ## Deposit layout (per session)
@@ -75,6 +76,7 @@ python scripts/get_data.py --what processed             # minian_out + deconv_ou
 python scripts/get_data.py --what minian_out            # a single processed stage
 python scripts/get_data.py --session live --doi <DOI>                  # the workshop recording
 python scripts/get_data.py --force                      # re-download even if local data exists
+python scripts/get_data.py --restore --what minian_out  # undo a broken run (see below)
 ```
 
 `--what` takes a **group** (`raw`, `processed`, `all`) **or a single stage name**
@@ -82,8 +84,43 @@ python scripts/get_data.py --force                      # re-download even if lo
 produced the other stages yourself — e.g. you tracked behavior in eztrack but
 want the canonical Minian output: `--what minian_out` pulls only that, and
 nothing downloads as a zip you have to open — each stage extracts straight into
-`data/sessions/<session>/<stage>/`, ready to use (the downloaded zip is kept in
-`data/.cache/` only to avoid re-downloading).
+`data/sessions/<session>/<stage>/`, ready to use. The downloaded zip is kept in
+`data/.cache/<session>/` — that's what avoids a re-download, and what makes
+[`--restore`](#restoring-a-stage-you-broke) below work offline.
+
+## Restoring a stage you broke
+
+Each processed stage is published as a zip, and the first `get_data.py` run
+leaves those zips in `data/.cache/<session>/`. So recovery is a **local**
+operation: if your own run of a step leaves output that breaks the notebooks
+downstream, put that stage back to the archive's copy with
+
+```bash
+python scripts/get_data.py --restore --what minian_out  # just Minian's output
+python scripts/get_data.py --restore                    # all processed stages
+```
+
+This **empties the stage dir before extracting**, and that's the difference that
+matters. `--force` re-downloads *over* what's already there — it overwrites the
+files the bundle names and leaves everything else alone. Since a `.zarr` store is
+a directory of chunk files, a leftover chunk from a half-finished run survives
+that and gets read straight back as data. `--restore` leaves you byte-identical
+to everyone else instead.
+
+Because it reuses the cached zip — checked against the archive's MD5 when the
+archive is reachable, taken as-is when it isn't — a restore is normally instant
+and **works with no network**, which is exactly the situation it's for: a room
+full of people sharing one connection. Add `--force` to distrust the cache and
+re-download the bundle.
+
+Two things worth knowing:
+
+- **`raw/` isn't a bundle**, so `--restore` skips it — and it needs no restore
+  path: a plain `python scripts/get_data.py --what raw` already checks every raw
+  file against the archive and re-pulls only what's missing or truncated.
+- If the cache is empty **and** the archive is unreachable, the restore reports a
+  failure and **leaves your stage untouched** rather than wiping it first and
+  stranding you with nothing.
 
 ## Getting the live recording (day 2)
 
