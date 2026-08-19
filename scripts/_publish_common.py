@@ -320,16 +320,21 @@ def mirror_hint(session: str, primary_doi: str | None, new_doi: str) -> str:
             f"    ]")
 
 
-def retrying(fn, label: str, attempts: int = 4) -> None:
-    """Run *fn* with backoff on transient transport failures.
+def retrying(fn, label: str, attempts: int = 7) -> None:
+    """Run *fn* with exponential backoff on transient transport failures.
 
-    Multi-hour uploads to throttled archives fail in transient ways we have
-    each seen once: a gateway 502 mid-push, a stalled socket write, a dropped
-    connection. Every caller has real resume machinery behind it — Zenodo skips
-    complete files, figshare re-reads its part list — so retrying costs only
-    what was genuinely lost, and NOT retrying turns an overnight run into a
-    morning surprise. Only transport-level errors retry; API errors (SystemExit
-    from _raise) mean something is actually wrong and still abort.
+    Multi-hour uploads to throttled archives fail in transient ways we have each
+    seen for real: a gateway 502 mid-push, a socket write stalled by throttling,
+    and — repeatedly — intermittent DNS resolution on the uploading machine.
+    Every caller has real resume machinery behind it (Zenodo skips complete
+    files, figshare re-reads its part list and continues mid-file), so a retry
+    costs only what was genuinely lost.
+
+    The budget is deliberately generous: ~30 minutes across the attempts, since
+    the failure that actually killed a run was a DNS window wider than a
+    three-minute linear backoff. Only transport-level errors retry; API errors
+    (SystemExit from _raise) mean something is genuinely wrong and still abort
+    immediately.
     """
     import requests
 
@@ -342,7 +347,7 @@ def retrying(fn, label: str, attempts: int = 4) -> None:
                 raise SystemExit(
                     f"{label}: still failing after {attempts} attempts "
                     f"({type(exc).__name__}) - re-run to resume.")
-            wait = 30 * attempt
+            wait = min(30 * 2 ** (attempt - 1), 600)
             print(f"       {label}: {type(exc).__name__}, "
                   f"retry {attempt}/{attempts - 1} in {wait}s")
             time.sleep(wait)
