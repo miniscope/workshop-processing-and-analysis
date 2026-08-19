@@ -320,12 +320,28 @@ def mirror_hint(session: str, primary_doi: str | None, new_doi: str) -> str:
             f"    ]")
 
 
+class TransientArchiveError(RuntimeError):
+    """A server-side failure worth retrying rather than aborting on.
+
+    Distinct from the SystemExit that ``_raise`` produces for real API errors:
+    a 400 or a 401 means the request was wrong and will stay wrong, while a 500
+    from a storage host mid-upload is weather. Keeping them separate is what
+    lets :func:`retrying` be aggressive without papering over genuine bugs.
+    """
+
+
+# 5xx is the storage layer having a bad moment; 429 is us being asked to slow
+# down. Both pass with time, and both used to kill a multi-hour upload outright.
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
 def retrying(fn, label: str, attempts: int = 7) -> None:
     """Run *fn* with exponential backoff on transient transport failures.
 
     Multi-hour uploads to throttled archives fail in transient ways we have each
-    seen for real: a gateway 502 mid-push, a socket write stalled by throttling,
-    and — repeatedly — intermittent DNS resolution on the uploading machine.
+    seen for real: a gateway 502 mid-push, a 500 from the upload host on a
+    single part, a socket write stalled by throttling, and — repeatedly —
+    intermittent DNS resolution on the uploading machine.
     Every caller has real resume machinery behind it (Zenodo skips complete
     files, figshare re-reads its part list and continues mid-file), so a retry
     costs only what was genuinely lost.
@@ -342,7 +358,8 @@ def retrying(fn, label: str, attempts: int = 7) -> None:
         try:
             fn()
             return
-        except (requests.ConnectionError, requests.Timeout) as exc:
+        except (requests.ConnectionError, requests.Timeout,
+                TransientArchiveError) as exc:
             if attempt == attempts:
                 raise SystemExit(
                     f"{label}: still failing after {attempts} attempts "

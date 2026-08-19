@@ -50,7 +50,8 @@ from pathlib import Path
 
 import requests
 
-from _publish_common import retrying
+from _publish_common import (RETRYABLE_STATUS, TransientArchiveError,
+                             retrying)
 from _publish_common import (DESCRIPTION_HTML, KEYWORDS, REPO_URL, TITLE_FMT,
                              UPLOAD_TIMEOUT, Progress, add_common_args, human,
                              load_token, md5, mirror_hint, plan)
@@ -114,6 +115,10 @@ class Figshare:
         if r.status_code in (401, 403):
             hint = ("\n  The token was rejected. Check .figshare_token holds a valid "
                     "personal token from https://figshare.com/account/applications")
+        if r.status_code in RETRYABLE_STATUS:
+            raise TransientArchiveError(
+                f"figshare API {r.status_code} on {r.request.method} "
+                f"{r.request.path_url}: {detail}")
         raise SystemExit(f"figshare API {r.status_code} on {r.request.method} "
                          f"{r.request.path_url}: {detail}{hint}")
 
@@ -324,4 +329,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except TransientArchiveError as exc:
+        # Outside an upload loop (a control-plane call) there is no retry
+        # wrapper, so turn it into the same readable exit everything else gets.
+        sys.exit(f"{exc}\n  Transient archive error - re-run to resume.")

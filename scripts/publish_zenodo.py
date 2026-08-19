@@ -56,7 +56,8 @@ from urllib.parse import quote
 
 import requests
 
-from _publish_common import retrying
+from _publish_common import (RETRYABLE_STATUS, TransientArchiveError,
+                             retrying)
 from _publish_common import (DESCRIPTION_HTML, KEYWORDS, REPO_URL, TITLE_FMT,
                              Progress, add_common_args, human, load_token, md5,
                              mirror_hint, plan)
@@ -135,6 +136,10 @@ class Zenodo:
             hint = ("\n  The token was rejected. Check it is for this site "
                     "(sandbox and production tokens are not interchangeable) and "
                     "that it has the deposit:write and deposit:actions scopes.")
+        if r.status_code in RETRYABLE_STATUS:
+            raise TransientArchiveError(
+                f"Zenodo API {r.status_code} on {r.request.method} "
+                f"{r.request.path_url}: {detail}")
         raise SystemExit(f"Zenodo API {r.status_code} on {r.request.method} "
                          f"{r.request.path_url}: {detail}{hint}")
 
@@ -240,4 +245,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except TransientArchiveError as exc:
+        # Outside an upload loop (a control-plane call) there is no retry
+        # wrapper, so turn it into the same readable exit everything else gets.
+        sys.exit(f"{exc}\n  Transient archive error - re-run to resume.")
