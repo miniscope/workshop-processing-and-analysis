@@ -23,6 +23,13 @@ dist/
 # so they're present on clone — see tutorials/<tool>/notebooks/PROVENANCE.md.
 # scripts/fetch_notebooks.py refreshes them (version-matched) but is optional.
 
+# Secrets: archive API tokens (scripts/publish_*.py). Never commit these — a
+# leaked token can rewrite or delete the lab's deposits. The .example files are
+# the committed templates; the real ones are ignored.
+.zenodo_token
+.zenodo_token.sandbox
+.figshare_token
+
 # OS / editor
 .DS_Store
 .vscode/

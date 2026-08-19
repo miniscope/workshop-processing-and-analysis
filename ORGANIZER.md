@@ -31,14 +31,28 @@ over email — not in a time-boxed room where one stuck laptop blocks everyone.
       folder, so they extract straight into the stage dir). Done — uploaded to the
       `prerecorded` deposit (double-zipped so Dataverse keeps each `*_out.zip`
       intact) and verified to download + extract via `get_data.py --what processed`.
-- [ ] **Archive downloads are currently broken.** Every file in the `prerecorded`
-      deposit returns `404 Failed to locate and/or open physical file` from
-      `dataverse.ucla.edu/api/access/datafile/<id>` (all 33 files, all three
-      dataset versions; the whole-dataset zip 500s). The metadata API is fine —
-      file list and checksums resolve — so this is storage-side, not our code.
-      **File a ticket with UCLA Dataverse support and re-test before the
-      workshop**; until it's fixed, `get_data.py` cannot fetch anything from
-      that DOI and participants depend entirely on data they already pulled.
+- [ ] **Archive downloads are currently broken, instance-wide.** Every file in
+      the `prerecorded` deposit returns `404 Failed to locate and/or open
+      physical file` from `dataverse.ucla.edu/api/access/datafile/<id>` (all 33
+      files, all three dataset versions; the whole-dataset zip 500s). It is not
+      our deposit: the same failure reproduces on unrelated public datasets on
+      the same instance (e.g. UCLA Registrar data, datafile 20383). Metadata
+      resolves fine, so this is storage-side. **File a ticket with UCLA
+      Dataverse support** — lead with "instance-wide, reproducible on datasets
+      we don't own", which routes to infrastructure rather than to a curator
+      checking our upload.
+- [ ] **Publish a mirror** so the workshop does not depend on one archive.
+      **figshare first** (`scripts/publish_figshare.py`) — it downloads ~11x
+      faster than Zenodo (measured 6.6 vs 0.6 MB/s), which is what matters for
+      a room pulling 9 GB; Zenodo (`scripts/publish_zenodo.py`) is the slow,
+      CERN-backed preservation copy. Both: `--dry-run` to check what goes up,
+      then bare to upload a draft, then `--publish` to mint the DOI. Add that
+      DOI to `SESSIONS["prerecorded"]` in `scripts/get_data.py` and fetches
+      fail over automatically — see
+      [Mirrors and archive outages](data/README.md#mirrors-and-archive-outages).
+      Tokens: `.figshare_token` / `.zenodo_token` (see the `.example` files).
+      In flight: figshare draft article 33289752, Zenodo draft deposition
+      22015414 — resume with `--article` / `--deposition` if interrupted.
 - [x] **Recovery lever for a participant who breaks a stage:**
       `python scripts/get_data.py --restore --what minian_out` wipes the stage
       and re-extracts the published bundle from `data/.cache/` — instant and

@@ -88,6 +88,51 @@ nothing downloads as a zip you have to open — each stage extracts straight int
 `data/.cache/<session>/` — that's what avoids a re-download, and what makes
 [`--restore`](#restoring-a-stage-you-broke) below work offline.
 
+## Mirrors and archive outages
+
+A session can list **more than one deposit**, and `get_data.py` picks between
+them automatically:
+
+```python
+SESSIONS = {
+    "prerecorded": [
+        "10.25346/S6SGHPCZ",           # UCLA Dataverse — primary
+        "10.6084/m9.figshare.XXXXXXX", # figshare mirror
+    ],
+}
+```
+
+They're tried in order, and for Dataverse candidates the test is deliberately
+stricter than "does the DOI resolve". A Dataverse can serve perfect metadata —
+file names, sizes, checksums, all correct — while its storage layer fails every
+single download. That is exactly how the UCLA archive went down, and a naive
+"did the DOI resolve" check would pick the broken primary every time and only
+fail at the first file. So `get_data.py` pulls the first kilobyte of the
+deposit's smallest file before committing to it, and falls through to the next
+mirror if that fails. (pooch-read archives — Zenodo, figshare — serve files
+from the record itself, so they're taken on trust once they resolve and
+hash-verified as they download.)
+
+Two consequences worth knowing:
+
+- **Data you already have is never blocked by an outage.** Local-first is
+  settled before any archive is contacted, so `KEEP` still works with every
+  mirror down. Same for `--restore`, which falls back to the cached bundle.
+- **A total failure tells you why**, per mirror — "resolves, but its files are
+  not downloadable" reads very differently from "unreadable", and points at the
+  archive rather than at your setup.
+
+Publishing a mirror is a maintainer job. Two publishers upload a session in
+exactly this layout and print the DOI to paste in:
+
+- [`scripts/publish_figshare.py`](../scripts/publish_figshare.py) — **use this
+  for the workshop mirror**: measured ~6.6 MB/s downloads against Zenodo's
+  ~0.6 MB/s, i.e. ~22 minutes for the full session instead of ~4 hours.
+  Token in `.figshare_token` (see `.figshare_token.example`).
+- [`scripts/publish_zenodo.py`](../scripts/publish_zenodo.py) — slow, but
+  CERN-backed: worth keeping as the long-term preservation copy. Token in
+  `.zenodo_token` (see `.zenodo_token.example`).
+
 ## Restoring a stage you broke
 
 Each processed stage is published as a zip, and the first `get_data.py` run

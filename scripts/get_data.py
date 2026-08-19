@@ -56,6 +56,17 @@ name (``minian_out`` / ``deconv_out`` / ``eztrack_out``). Pulling one stage is
 handy when you produced the others yourself — e.g. you tracked behavior in
 eztrack but want the canonical Minian output: ``--what minian_out``.
 
+Mirrors
+-------
+A session can list more than one deposit in :data:`SESSIONS`, tried in order.
+A Dataverse candidate must both resolve **and** actually serve bytes, so a
+primary whose storage has failed is skipped rather than chosen and then failed
+on — see :func:`_deposit_ok` for why "the DOI resolves" is not enough. (The
+byte probe is Dataverse-specific: pooch archives like Zenodo/figshare serve
+files from the record itself and are taken on trust once they resolve.)
+Publish a mirror with ``scripts/publish_figshare.py`` or
+``scripts/publish_zenodo.py`` and add its DOI to the session's list.
+
 Restoring a stage you broke
 ---------------------------
 ``--restore`` puts a processed stage back to the archive's canonical copy — the
@@ -101,6 +112,11 @@ GROUPS = {
 }
 
 _TIMEOUT = 60  # seconds, per request
+# Some archives (Harvard Dataverse among them) answer Python's default
+# User-Agent with 403. Without this we would silently fall back to pooch for a
+# perfectly good Dataverse instance and lose the native path's resume, progress
+# and size verification — and skip the `_deposit_ok` health probe with it.
+_HEADERS = {"User-Agent": "workshop-processing-and-analysis (github.com/miniscope)"}
 _CHUNK = 1 << 20  # 1 MiB streaming chunk
 
 # Raw video file types. With --skip-video these are left in the deposit and only
@@ -109,12 +125,17 @@ _CHUNK = 1 << 20  # 1 MiB streaming chunk
 # needed to *run* Minian (step 2) / eztrack (step 4) yourself.
 _VIDEO_EXTS = {".avi", ".mp4", ".mkv", ".mov"}
 
-# One dataset (DOI) per session; we read filenames + hashes from the DOI itself.
-# Fill a DOI once its dataset is published. The live dataset's DOI is usually
-# passed at workshop time via --doi rather than committed here.
-SESSIONS: dict[str, str | None] = {
-    "prerecorded": "10.25346/S6SGHPCZ",  # UCLA Dataverse — published
-    "live": None,                        # set here if you publish it, or pass --doi
+# One or more deposits per session, tried in order; we read filenames + hashes
+# from the DOI itself. Listing a mirror is what makes an archive outage
+# survivable — and the check that picks between them is deliberately stricter
+# than "does the DOI resolve" (see `_deposit_ok`). The live dataset's DOI is
+# usually passed at workshop time via --doi rather than committed here.
+SESSIONS: dict[str, list[str]] = {
+    "prerecorded": [
+        "10.25346/S6SGHPCZ",         # UCLA Dataverse — primary
+        # "10.5281/zenodo.XXXXXXX",  # Zenodo mirror — fill in once published
+    ],
+    "live": [],                      # add its DOI here, or pass --doi
 }
 
 
@@ -123,7 +144,8 @@ def _nonempty(d: Path) -> bool:
 
 
 def _get_json(url: str) -> dict:
-    with urllib.request.urlopen(url, timeout=_TIMEOUT) as r:
+    req = urllib.request.Request(url, headers=_HEADERS)
+    with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
         return json.load(r)
 
 
@@ -168,6 +190,98 @@ def discover(doi: str) -> tuple[str, dict, str]:
         p = pooch.create(path=CACHE, base_url=f"doi:{doi}/", registry=None)
         p.load_registry_from_doi()
         return "pooch", dict(p.registry), doi
+
+
+def _deposit_ok(kind: str, registry: dict, ctx: str) -> bool:
+    """Cheap check that a deposit actually serves *bytes*, not just metadata.
+
+    A Dataverse instance can list a dataset perfectly — file names, sizes,
+    checksums, all correct — while its storage layer fails every single
+    download. That is exactly how UCLA's archive went down, and it is why
+    "the DOI resolves" is not enough to pick a mirror: the broken primary would
+    win every time and then fail at the first file.
+
+    So pull the first kilobyte of the deposit's smallest file. One request,
+    and it distinguishes a healthy archive from a hollow one.
+    """
+    if kind != "dataverse" or not registry:
+        # Only Dataverse splits metadata and storage across services this way.
+        # pooch (Zenodo/figshare) serves both from the record itself, and
+        # hash-verifies every file as it downloads — so no probe, which also
+        # means a restricted/embargoed pooch deposit is only caught at download
+        # time, not here.
+        return True
+    # Smallest non-zero file: a 0-byte file would make the Range request a
+    # spec-legal 416 on some backends and misreport a healthy archive as down.
+    sizes = {n: int(registry[n].get("size") or 0) for n in registry}
+    name = min(sizes, key=lambda n: sizes[n] or float("inf"))
+    url = f"{ctx}/api/access/datafile/{registry[name]['id']}"
+    try:
+        req = urllib.request.Request(url, headers={**_HEADERS, "Range": "bytes=0-1023"})
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
+            r.read(1)
+        return True
+    except urllib.error.HTTPError as e:
+        # 416 = the storage layer looked at the file and answered; that is a
+        # working archive (every file may be 0 bytes), not a hollow one.
+        return e.code == 416
+    except Exception:
+        return False
+
+
+def resolve_deposit(session: str, doi: str | None = None,
+                    require_downloadable: bool = True,
+                    ) -> tuple[str, str, dict, str]:
+    """Find a usable deposit for *session*, returning ``(doi, kind, registry, ctx)``.
+
+    Mirrors from :data:`SESSIONS` are tried in order and a deposit is only
+    accepted if it both resolves *and* passes :func:`_deposit_ok`, so a primary
+    whose storage is down is skipped rather than chosen and then failed on. An
+    explicit *doi* bypasses the list entirely — that is the workshop-time
+    override, and second-guessing it would be surprising.
+
+    *require_downloadable* is what callers who only need the **file list** turn
+    off — auditing local files against the archive's manifest reads no data, so
+    a deposit whose storage is down still answers that question perfectly well.
+    Demanding downloadability there would report a local problem where there is
+    only a remote one.
+
+    Raises ``LookupError`` naming what went wrong with each candidate, so a
+    total failure says *why* every mirror was unusable instead of just "no DOI".
+    """
+    candidates = [doi] if doi else list(SESSIONS.get(session) or [])
+    if not candidates:
+        raise LookupError(
+            f"no DOI known for session {session!r}. Pass --doi <DOI>, or add one to "
+            f"SESSIONS[{session!r}] in scripts/get_data.py.")
+
+    problems = []
+    for candidate in candidates:
+        if "XXXXXXX" in candidate:
+            problems.append(f"doi:{candidate} — placeholder, not published yet")
+            continue
+        try:
+            kind, registry, ctx = discover(candidate)
+        except Exception as exc:
+            problems.append(f"doi:{candidate} — unreadable ({type(exc).__name__}: {exc})")
+            continue
+        if not registry:
+            # A deposit that lists nothing can satisfy nothing — and accepting
+            # it here would mask a working mirror further down the list.
+            problems.append(f"doi:{candidate} — resolves, but lists no files")
+            continue
+        if require_downloadable and not _deposit_ok(kind, registry, ctx):
+            problems.append(f"doi:{candidate} — resolves, but its files are not "
+                            f"downloadable (archive storage outage)")
+            continue
+        if candidate != candidates[0]:
+            print(f"  NOTE primary deposit unusable; falling back to doi:{candidate}")
+            for why in problems:
+                print(f"       ({why})")
+        return candidate, kind, registry, ctx
+
+    raise LookupError(f"no usable deposit for session {session!r}:\n  "
+                      + "\n  ".join(problems))
 
 
 def _human(n: float) -> str:
@@ -215,6 +329,29 @@ def _is_complete(path: Path, rec: dict) -> bool:
     return bool(int(rec.get("size") or 0))
 
 
+def _matches_registry(path: Path, rec) -> bool:
+    """True if *path* matches the archive's record for it, whatever its shape.
+
+    The two archive kinds hand back different registry entries: Dataverse gives
+    ``{"size", "md5"}``, pooch (Zenodo/figshare) gives a bare ``"alg:hexdigest"``
+    string. Anything that inspects a registry entry has to handle both, or it
+    works on one archive and raises ``AttributeError`` on the other.
+    """
+    if isinstance(rec, dict):
+        return _is_complete(path, rec)
+    alg, _, want = str(rec).partition(":")
+    if not want:  # a bare digest with no algorithm prefix
+        alg, want = "md5", str(rec)
+    try:
+        h = hashlib.new(alg)
+    except ValueError:
+        return True  # unknown algorithm — nothing we can check it against
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(_CHUNK), b""):
+            h.update(chunk)
+    return h.hexdigest() == want
+
+
 def _dataverse_download(server: str, rec: dict, dest_path: Path, label: str = "") -> None:
     """Stream a Dataverse datafile to *dest_path*, verifying its MD5.
 
@@ -223,10 +360,11 @@ def _dataverse_download(server: str, rec: dict, dest_path: Path, label: str = ""
     ``[3/28] 12.avi``)."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     url = f"{server}/api/access/datafile/{rec['id']}"
+    req = urllib.request.Request(url, headers=_HEADERS)
     total = int(rec.get("size") or 0)
     digest = hashlib.md5()
     done = 0
-    with urllib.request.urlopen(url, timeout=_TIMEOUT) as r, open(dest_path, "wb") as out:
+    with urllib.request.urlopen(req, timeout=_TIMEOUT) as r, open(dest_path, "wb") as out:
         for chunk in iter(lambda: r.read(_CHUNK), b""):
             out.write(chunk)
             digest.update(chunk)
@@ -272,6 +410,12 @@ def _fetch(kind: str, ctx: str, registry: dict, names: list[str], dest: Path,
     else:  # pooch (Zenodo/figshare/etc.)
         import pooch
 
+        if force:
+            # pooch re-downloads only what is absent or fails its hash, so a
+            # forced refetch means removing the local copy first. Without this,
+            # --force is silently a no-op on Zenodo-hosted sessions.
+            for n in names:
+                (dest / n).unlink(missing_ok=True)
         p = pooch.create(
             path=dest, base_url=f"doi:{ctx}/",
             registry={n: registry[n] for n in names},
@@ -353,7 +497,7 @@ def _cached_bundle(session: str, stage: str, rec: dict | None) -> Path | None:
         return None
     if rec is None:
         return bundle
-    return bundle if _is_complete(bundle, rec) else None
+    return bundle if _matches_registry(bundle, rec) else None
 
 
 def raw_audit(session: str, doi: str | None = None, deep: bool = False,
@@ -370,10 +514,11 @@ def raw_audit(session: str, doi: str | None = None, deep: bool = False,
     a pre-flight check. Raises if the deposit can't be read (offline, bad DOI)
     so callers can degrade to local-only checks instead of reporting a failure.
     """
-    doi = doi or SESSIONS.get(session)
-    if not doi:
-        raise ValueError(f"no DOI known for session {session!r}")
-    kind, registry, _ctx = discover(doi)
+    # Metadata is all an audit needs: it compares local files against the
+    # published list and never downloads. A deposit whose storage has failed
+    # still answers that perfectly, so don't demand downloadability here.
+    _doi, kind, registry, _ctx = resolve_deposit(session, doi,
+                                                 require_downloadable=False)
     zips = {f"{st}.zip" for st in PROCESSED}
     raw_dir = DATA_ROOT / session / "raw"
     check = _is_complete if deep else _size_ok
@@ -394,7 +539,7 @@ def raw_audit(session: str, doi: str | None = None, deep: bool = False,
     return sorted(missing), sorted(damaged)
 
 
-def fetch_session(session: str, doi: str, stages: list[str], force: bool,
+def fetch_session(session: str, doi: str | None, stages: list[str], force: bool,
                   skip_video: bool = False) -> tuple[int, int]:
     """Fetch the requested *stages* of *session*.
 
@@ -403,32 +548,54 @@ def fetch_session(session: str, doi: str, stages: list[str], force: bool,
     *skipped*, not failed — only download/extract errors (and an unreadable
     deposit) count toward *failed*.
     """
-    try:
-        kind, registry, ctx = discover(doi)
-    except Exception as exc:  # bad/unpublished DOI, no network, API change
-        print(f"  FAIL {session}: could not read deposit at doi:{doi} "
-              f"({type(exc).__name__}: {exc})")
-        return 0, len(stages)
-
     _migrate_flat_cache()
-    zip_for = {st: f"{st}.zip" for st in PROCESSED}
-    raw_files = [f for f in registry if f not in set(zip_for.values())]
 
+    # Local-first, and settled *before* any archive is contacted. Keeping a
+    # stage you already have is a purely local decision, so an archive outage
+    # must not turn it into a failure — someone whose data is already on disk
+    # has no business being blocked by a dead server.
+    #
+    # `raw` never short-circuits here: it comes from the archive file-by-file,
+    # so its completeness is verifiable against the registry, and _fetch re-pulls
+    # only what is missing or truncated. A blanket "dir is non-empty -> KEEP"
+    # would mistake an interrupted pull for a finished one and leave the session
+    # quietly incomplete. Processed stages stay coarse: a local dir there may be
+    # your own upstream output, which is the whole point of local-first.
     ok = failed = 0
+    todo = []
     for stage in stages:
-        dest = DATA_ROOT / session / stage
-        # `raw` comes from the archive file-by-file, so its completeness is
-        # verifiable against the registry — fall through and let _fetch skip the
-        # files we already have and re-pull only what's missing or truncated. A
-        # blanket "dir is non-empty -> KEEP" here would mistake an interrupted
-        # pull for a finished one and leave the session quietly incomplete.
-        # Processed stages stay coarse: a local dir there may be your own
-        # upstream output (that's the point of local-first), so we keep it.
-        if stage != "raw" and _nonempty(dest) and not force:
+        if stage != "raw" and _nonempty(DATA_ROOT / session / stage) and not force:
             print(f"  KEEP {session}/{stage}: local data present "
                   f"(--force to re-download; --restore to replace a broken run).")
             ok += 1
-            continue
+        else:
+            todo.append(stage)
+    if not todo:
+        return ok, failed
+
+    try:
+        doi, kind, registry, ctx = resolve_deposit(session, doi)
+    except LookupError as exc:
+        # No deposit serves bytes right now — but the *file list* may still
+        # resolve, and _fetch skips every file that already matches it. So a
+        # raw/ that is already complete on disk verifies and KEEPs during an
+        # outage instead of failing; only stages that genuinely need bytes go
+        # on to FAIL, per stage, with the real download error.
+        try:
+            doi, kind, registry, ctx = resolve_deposit(session, doi,
+                                                       require_downloadable=False)
+            print(f"  NOTE {exc}")
+            print(f"       verifying local files against the file list anyway.")
+        except LookupError:
+            print(f"  FAIL {session}: {exc}")
+            return ok, failed + len(todo)
+    print(f"  using doi:{doi} ({kind})")
+
+    zip_for = {st: f"{st}.zip" for st in PROCESSED}
+    raw_files = [f for f in registry if f not in set(zip_for.values())]
+
+    for stage in todo:
+        dest = DATA_ROOT / session / stage
         try:
             if stage == "raw":
                 files = raw_files
@@ -479,18 +646,17 @@ def restore_session(session: str, stages: list[str], doi: str | None = None,
     Returns ``(restored, failed)``.
     """
     _migrate_flat_cache()
-    doi = doi or SESSIONS.get(session)
     kind = ctx = None
     registry: dict | None = None
-    if doi:
-        try:
-            kind, registry, ctx = discover(doi)
-        except Exception as exc:
-            print(f"  NOTE archive unreachable ({type(exc).__name__}) - "
-                  f"restoring from the local cache alone.")
-    else:
-        print(f"  NOTE no DOI for session '{session}' - "
-              f"restoring from the local cache alone.")
+    try:
+        doi, kind, registry, ctx = resolve_deposit(session, doi)
+    except LookupError as exc:
+        # No usable deposit is not fatal here: the cached bundle is the whole
+        # point of a restore, and it is exactly when the archive is down that
+        # someone needs one. Say why, in full, then fall through to the cache.
+        for i, line in enumerate(str(exc).splitlines()):
+            print(f"  NOTE {line}" if i == 0 else f"       {line.strip()}")
+        print(f"       restoring from the local cache alone.")
 
     restored = failed = 0
     for stage in stages:
@@ -573,20 +739,9 @@ def main() -> int:
         print(f"\n{ok} stage(s) restored under data/sessions/{args.session}/")
         return 1 if failed else 0
 
-    doi = args.doi or SESSIONS.get(args.session)
-    if not doi:
-        print(f"No DOI for session '{args.session}'. Publish its dataset and set "
-              f"SESSIONS['{args.session}'] in this script, or pass --doi <DOI>.")
-        return 1
-    if "XXXXXXX" in doi:
-        print(f"Session '{args.session}' has a placeholder DOI ({doi}) — its dataset "
-              f"isn't published yet.\nPass a real one with --doi <DOI>, "
-              f"or wait for the workshop release.")
-        return 1
-
-    print(f"Fetching session '{args.session}' from doi:{doi} "
+    print(f"Fetching session '{args.session}' "
           f"({what}: {', '.join(stages)}) ...")
-    ok, failed = fetch_session(args.session, doi, stages, args.force, args.skip_video)
+    ok, failed = fetch_session(args.session, args.doi, stages, args.force, args.skip_video)
     print(f"\n{ok}/{len(stages)} stage(s) available under data/sessions/{args.session}/")
     return 1 if failed else 0
 
