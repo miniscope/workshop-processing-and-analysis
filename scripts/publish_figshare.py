@@ -158,7 +158,17 @@ class Figshare:
         self._call("PUT", f"/account/articles/{article_id}", json=meta)
 
     def files(self, article_id: int) -> list[dict]:
-        return self._call("GET", f"/account/articles/{article_id}/files")
+        """Every file in the article — explicitly unpaginated.
+
+        figshare defaults this endpoint to 10 results. Taking that default is
+        catastrophic here rather than merely incomplete: the resume filter reads
+        this list, so from the 11th file on every restart sees "not uploaded
+        yet", re-initiates, and — since figshare permits same-named files in one
+        article — leaves duplicates behind. A deposit holding several different
+        blobs under one name is worse than one that is simply missing it.
+        """
+        return self._call("GET", f"/account/articles/{article_id}/files",
+                          params={"page_size": 1000})
 
     def delete_file(self, article_id: int, file_id: int) -> None:
         self._call("DELETE", f"/account/articles/{article_id}/files/{file_id}")
