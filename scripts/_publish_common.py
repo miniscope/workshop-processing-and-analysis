@@ -320,6 +320,34 @@ def mirror_hint(session: str, primary_doi: str | None, new_doi: str) -> str:
             f"    ]")
 
 
+def retrying(fn, label: str, attempts: int = 4) -> None:
+    """Run *fn* with backoff on transient transport failures.
+
+    Multi-hour uploads to throttled archives fail in transient ways we have
+    each seen once: a gateway 502 mid-push, a stalled socket write, a dropped
+    connection. Every caller has real resume machinery behind it — Zenodo skips
+    complete files, figshare re-reads its part list — so retrying costs only
+    what was genuinely lost, and NOT retrying turns an overnight run into a
+    morning surprise. Only transport-level errors retry; API errors (SystemExit
+    from _raise) mean something is actually wrong and still abort.
+    """
+    import requests
+
+    for attempt in range(1, attempts + 1):
+        try:
+            fn()
+            return
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            if attempt == attempts:
+                raise SystemExit(
+                    f"{label}: still failing after {attempts} attempts "
+                    f"({type(exc).__name__}) - re-run to resume.")
+            wait = 30 * attempt
+            print(f"       {label}: {type(exc).__name__}, "
+                  f"retry {attempt}/{attempts - 1} in {wait}s")
+            time.sleep(wait)
+
+
 class Progress:
     """File wrapper that draws a single-line progress meter as it is read.
 

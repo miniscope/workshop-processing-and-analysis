@@ -50,6 +50,7 @@ from pathlib import Path
 
 import requests
 
+from _publish_common import retrying
 from _publish_common import (DESCRIPTION_HTML, KEYWORDS, REPO_URL, TITLE_FMT,
                              UPLOAD_TIMEOUT, Progress, add_common_args, human,
                              load_token, md5, mirror_hint, plan)
@@ -291,7 +292,8 @@ def main() -> int:
     for i, (name, path, existing) in enumerate(todo, 1):
         label = f"[{i}/{len(todo)}] {name}"
         file_id = api.ensure_file(article_id, name, path, existing)
-        api.upload(article_id, file_id, path, label)
+        # On retry the part list is re-read, so completed parts are not re-sent.
+        retrying(lambda: api.upload(article_id, file_id, path, label), label)
         print(f"       {label} done ({human(path.stat().st_size)})")
 
     if not args.publish:

@@ -56,11 +56,18 @@ from urllib.parse import quote
 
 import requests
 
+from _publish_common import retrying
 from _publish_common import (DESCRIPTION_HTML, KEYWORDS, REPO_URL, TITLE_FMT,
-                             UPLOAD_TIMEOUT, Progress, add_common_args, human,
-                             load_token, md5, mirror_hint, plan)
+                             Progress, add_common_args, human, load_token, md5,
+                             mirror_hint, plan)
 
-_TIMEOUT = 60  # control-plane calls; upload PUTs use UPLOAD_TIMEOUT
+_TIMEOUT = 60  # control-plane calls
+# Zenodo throttles uploads hard (~0.15 MB/s measured), and a single socket
+# write can stall for many minutes without the connection being dead — a 300s
+# write timeout aborted a healthy (if glacial) transfer in practice. 30 min
+# still converts a truly dead connection into an exception the resume machinery
+# can act on, which is the only job this timeout has.
+_UPLOAD_TIMEOUT = (30, 1800)
 
 # Zenodo and its sandbox are separate sites with separate accounts and separate
 # tokens. Rehearsing on the sandbox is advisable before a multi-GB push. The
@@ -148,7 +155,7 @@ class Zenodo:
         body = Progress(path, label)
         try:
             r = self.session.put(f"{bucket}/{quote(name)}", data=body,
-                                 timeout=UPLOAD_TIMEOUT)
+                                 timeout=_UPLOAD_TIMEOUT)
         finally:
             body.close()
             Progress.clear()
@@ -207,8 +214,9 @@ def main() -> int:
         print(f"  uploading {len(todo)} file(s), "
               f"{human(sum(p.stat().st_size for _, p in todo))}")
     for i, (name, path) in enumerate(todo, 1):
-        api.upload(bucket, name, path, label=f"[{i}/{len(todo)}] {name}")
-        print(f"       [{i}/{len(todo)}] {name} done ({human(path.stat().st_size)})")
+        label = f"[{i}/{len(todo)}] {name}"
+        retrying(lambda: api.upload(bucket, name, path, label=label), label)
+        print(f"       {label} done ({human(path.stat().st_size)})")
 
     api.set_metadata(dep_id, metadata(args.session, args.primary_doi or None))
     print("  metadata set.")
