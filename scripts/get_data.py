@@ -130,12 +130,19 @@ _VIDEO_EXTS = {".avi", ".mp4", ".mkv", ".mov"}
 # survivable — and the check that picks between them is deliberately stricter
 # than "does the DOI resolve" (see `_deposit_ok`). The live dataset's DOI is
 # usually passed at workshop time via --doi rather than committed here.
+# Ordered by measured download throughput, fastest first — because order is the
+# only preference mechanism there is. A candidate is checked for *reachability*,
+# never for speed, so a slow-but-alive archive listed first would simply be used
+# and everyone would crawl. Provenance does not argue for a different order:
+# every mirror is byte-identical and MANIFEST.txt proves it per file.
 SESSIONS: dict[str, list[str]] = {
     "prerecorded": [
-        "10.25346/S6SGHPCZ",         # UCLA Dataverse — primary
-        # "10.5281/zenodo.XXXXXXX",  # Zenodo mirror — fill in once published
+        "10.6084/m9.figshare.33289752",  # figshare  — ~6.6 MB/s measured
+        "10.25346/S6SGHPCZ",             # UCLA Dataverse — canonical primary
+        # "10.5281/zenodo.XXXXXXX",      # Zenodo — ~0.6 MB/s; preservation copy,
+                                         #   deliberately last. Fill in when published.
     ],
-    "live": [],                      # add its DOI here, or pass --doi
+    "live": [],                          # add its DOI here, or pass --doi
 }
 
 
