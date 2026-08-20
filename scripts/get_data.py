@@ -1,8 +1,8 @@
 """Fetch workshop data from a DOI-referenced public archive — per session, per
 stage, local-first.
 
-Each session is **one DOI-referenced dataset** on a public archive (UCLA
-Dataverse today; Zenodo is equally supported for future deposits). We read the
+Each session is one or more **DOI-referenced deposits** on public archives
+(figshare and UCLA Dataverse today; Zenodo is equally supported). We read the
 file list and checksums straight from the archive, so the only thing this script
 needs to know is the DOI — no hardcoded filenames or hashes. A dataset holds:
 
@@ -90,6 +90,8 @@ import hashlib
 import json
 import shutil
 import sys
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -137,13 +139,17 @@ _VIDEO_EXTS = {".avi", ".mp4", ".mkv", ".mov"}
 # every mirror is byte-identical and MANIFEST.txt proves it per file.
 SESSIONS: dict[str, list[str]] = {
     "prerecorded": [
-        "10.6084/m9.figshare.33289752",  # figshare  — ~6.6 MB/s measured
-        "10.25346/S6SGHPCZ",             # UCLA Dataverse — canonical primary
-        # "10.5281/zenodo.XXXXXXX",      # Zenodo — ~0.6 MB/s; preservation copy,
-                                         #   deliberately last. Fill in when published.
+        "10.25346/S6SGHPCZ",                # UCLA Dataverse — ~9.2 MB/s measured
+        "10.6084/m9.figshare.33289752.v1",  # figshare mirror — ~6.9 MB/s measured
+        # "10.5281/zenodo.XXXXXXX",         # Zenodo — ~0.6 MB/s; preservation
+                                            #   copy, deliberately last.
     ],
-    "live": [],                          # add its DOI here, or pass --doi
+    "live": [],                             # add its DOI here, or pass --doi
 }
+
+# The figshare DOI is version-pinned (`.v1`). An unpinned figshare DOI resolves
+# to "latest", which would silently change what participants receive if a v2 is
+# ever published — and it makes pooch warn on every single fetch.
 
 
 def _nonempty(d: Path) -> bool:
@@ -202,27 +208,36 @@ def discover(doi: str) -> tuple[str, dict, str]:
 def _deposit_ok(kind: str, registry: dict, ctx: str) -> bool:
     """Cheap check that a deposit actually serves *bytes*, not just metadata.
 
-    A Dataverse instance can list a dataset perfectly — file names, sizes,
-    checksums, all correct — while its storage layer fails every single
-    download. That is exactly how UCLA's archive went down, and it is why
-    "the DOI resolves" is not enough to pick a mirror: the broken primary would
-    win every time and then fail at the first file.
+    An archive can list a dataset perfectly — file names, sizes, checksums, all
+    correct — while its storage layer fails every single download. That is
+    exactly how UCLA's archive went down, and it is why "the DOI resolves" is
+    not enough to pick a mirror: the broken candidate would win every time and
+    then fail at the first file.
 
-    So pull the first kilobyte of the deposit's smallest file. One request,
-    and it distinguishes a healthy archive from a hollow one.
+    So ask for the first kilobyte of one file and read a byte of it. One
+    request, and it distinguishes a healthy archive from a hollow one.
     """
-    if kind != "dataverse" or not registry:
-        # Only Dataverse splits metadata and storage across services this way.
-        # pooch (Zenodo/figshare) serves both from the record itself, and
-        # hash-verifies every file as it downloads — so no probe, which also
-        # means a restricted/embargoed pooch deposit is only caught at download
-        # time, not here.
-        return True
-    # Smallest non-zero file: a 0-byte file would make the Range request a
-    # spec-legal 416 on some backends and misreport a healthy archive as down.
-    sizes = {n: int(registry[n].get("size") or 0) for n in registry}
-    name = min(sizes, key=lambda n: sizes[n] or float("inf"))
-    url = f"{ctx}/api/access/datafile/{registry[name]['id']}"
+    if not registry:
+        return False
+
+    if kind == "dataverse":
+        # Smallest non-zero file: a 0-byte file would make the Range request a
+        # spec-legal 416 on some backends and misreport a healthy archive as down.
+        sizes = {n: int(registry[n].get("size") or 0) for n in registry}
+        name = min(sizes, key=lambda n: sizes[n] or float("inf"))
+        url = f"{ctx}/api/access/datafile/{registry[name]['id']}"
+    else:
+        # pooch archives get the same treatment. They used to be taken on
+        # trust, which was survivable only while a Dataverse deposit was listed
+        # first — the moment the list was reordered by speed, the trusted kind
+        # became the *default* and the probe covered nothing. An embargoed or
+        # unpublished figshare/Zenodo record resolves and lists files perfectly.
+        try:
+            from pooch.downloaders import doi_to_repository
+
+            url = doi_to_repository(ctx).download_url(sorted(registry)[0])
+        except Exception:
+            return True  # cannot construct a probe; don't fail a usable mirror
     try:
         req = urllib.request.Request(url, headers={**_HEADERS, "Range": "bytes=0-1023"})
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
@@ -263,6 +278,7 @@ def resolve_deposit(session: str, doi: str | None = None,
             f"SESSIONS[{session!r}] in scripts/get_data.py.")
 
     problems = []
+    degraded = None  # resolves and lists files, but serves no bytes
     for candidate in candidates:
         if "XXXXXXX" in candidate:
             problems.append(f"doi:{candidate} — placeholder, not published yet")
@@ -277,15 +293,23 @@ def resolve_deposit(session: str, doi: str | None = None,
             # it here would mask a working mirror further down the list.
             problems.append(f"doi:{candidate} — resolves, but lists no files")
             continue
-        if require_downloadable and not _deposit_ok(kind, registry, ctx):
+        if not _deposit_ok(kind, registry, ctx):
             problems.append(f"doi:{candidate} — resolves, but its files are not "
                             f"downloadable (archive storage outage)")
+            degraded = degraded or (candidate, kind, registry, ctx)
             continue
         if candidate != candidates[0]:
             print(f"  NOTE primary deposit unusable; falling back to doi:{candidate}")
             for why in problems:
                 print(f"       ({why})")
         return candidate, kind, registry, ctx
+
+    if not require_downloadable and degraded:
+        # Callers that only need the file *list* (an audit, or verifying local
+        # files we already have) can work from a deposit whose storage is down.
+        # Returning it here means the outage path costs one discovery pass, not
+        # two, and never re-pays a stalled candidate's timeouts.
+        return degraded
 
     raise LookupError(f"no usable deposit for session {session!r}:\n  "
                       + "\n  ".join(problems))
@@ -299,13 +323,17 @@ def _human(n: float) -> str:
         n /= 1024
 
 
-def _md5(path: Path) -> str:
-    """MD5 of *path*, read in chunks (files here run to hundreds of MB)."""
-    h = hashlib.md5()
+def _digest(path: Path, alg: str = "md5") -> str:
+    """*alg* digest of *path*, read in chunks (files here run to hundreds of MB)."""
+    h = hashlib.new(alg)
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(_CHUNK), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _md5(path: Path) -> str:
+    return _digest(path, "md5")
 
 
 def _size_ok(path: Path, rec: dict) -> bool:
@@ -350,13 +378,9 @@ def _matches_registry(path: Path, rec) -> bool:
     if not want:  # a bare digest with no algorithm prefix
         alg, want = "md5", str(rec)
     try:
-        h = hashlib.new(alg)
+        return _digest(path, alg) == want
     except ValueError:
         return True  # unknown algorithm — nothing we can check it against
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(_CHUNK), b""):
-            h.update(chunk)
-    return h.hexdigest() == want
 
 
 def _dataverse_download(server: str, rec: dict, dest_path: Path, label: str = "") -> None:
@@ -371,17 +395,26 @@ def _dataverse_download(server: str, rec: dict, dest_path: Path, label: str = ""
     total = int(rec.get("size") or 0)
     digest = hashlib.md5()
     done = 0
+    # Redraw at most 4x/second, and not at all when stdout is not a tty: there
+    # `\r` cannot overwrite, so an unthrottled meter writes ~9,300 lines and
+    # ~550 KB of spew per raw pull into whatever the output is piped to.
+    tty = sys.stdout.isatty()
+    last_draw = 0.0
     with urllib.request.urlopen(req, timeout=_TIMEOUT) as r, open(dest_path, "wb") as out:
         for chunk in iter(lambda: r.read(_CHUNK), b""):
             out.write(chunk)
             digest.update(chunk)
             done += len(chunk)
-            pct = f"{done / total * 100:5.1f}%" if total else "  ?  "
-            bar = f"{_human(done)}" + (f" / {_human(total)}" if total else "")
-            sys.stdout.write(f"\r       {label} {pct}  {bar}        ")
-            sys.stdout.flush()
-    sys.stdout.write("\r" + " " * 79 + "\r")  # clear the progress line
-    sys.stdout.flush()
+            now = time.monotonic()
+            if tty and now - last_draw >= 0.25:
+                last_draw = now
+                pct = f"{done / total * 100:5.1f}%" if total else "  ?  "
+                bar = f"{_human(done)}" + (f" / {_human(total)}" if total else "")
+                sys.stdout.write(f"\r       {label} {pct}  {bar}        ")
+                sys.stdout.flush()
+    if tty:
+        sys.stdout.write("\r" + " " * 79 + "\r")  # clear the progress line
+        sys.stdout.flush()
     if rec["md5"] and digest.hexdigest() != rec["md5"]:
         dest_path.unlink(missing_ok=True)
         raise RuntimeError(f"MD5 mismatch for {dest_path.name}")
@@ -513,9 +546,10 @@ def raw_audit(session: str, doi: str | None = None, deep: bool = False,
 
     Returns ``(missing, damaged)``: names the deposit has that aren't on disk,
     and names whose local copy doesn't match what was published. The default
-    checks presence and size — what an interrupted download breaks — and reads
-    no file contents; *deep* also verifies every MD5 (reads every byte, so
-    roughly 10 s per 10 GB).
+    checks presence and, where the archive publishes a size, that the size
+    matches — what an interrupted download breaks — and reads no file contents.
+    *deep* verifies the published hash instead, which works for every archive
+    kind (reads every byte, so roughly 10 s per 10 GB).
 
     Only the file *list* is fetched, never the data, so this is cheap enough for
     a pre-flight check. Raises if the deposit can't be read (offline, bad DOI)
@@ -526,9 +560,13 @@ def raw_audit(session: str, doi: str | None = None, deep: bool = False,
     # still answers that perfectly, so don't demand downloadability here.
     _doi, kind, registry, _ctx = resolve_deposit(session, doi,
                                                  require_downloadable=False)
+    # Registry entry shape is a property of the archive kind, decided once here
+    # rather than sniffed per entry. Dataverse publishes a size, so a shallow
+    # audit can spot truncation; pooch archives publish only a hash, so there
+    # the shallow check degrades to presence and `deep` does the real work.
+    has_size = kind == "dataverse"
     zips = {f"{st}.zip" for st in PROCESSED}
     raw_dir = DATA_ROOT / session / "raw"
-    check = _is_complete if deep else _size_ok
 
     missing: list[str] = []
     damaged: list[str] = []
@@ -538,10 +576,9 @@ def raw_audit(session: str, doi: str | None = None, deep: bool = False,
         path = raw_dir / name
         if not path.is_file():
             missing.append(name)
-        elif isinstance(rec, dict) and not check(path, rec):
-            # pooch registries carry only a hash string, so non-Dataverse
-            # deposits are audited for presence alone — pooch itself
-            # hash-verifies each file as it downloads.
+        elif deep and not _matches_registry(path, rec):
+            damaged.append(name)
+        elif not deep and has_size and not _size_ok(path, rec):
             damaged.append(name)
     return sorted(missing), sorted(damaged)
 
@@ -580,22 +617,17 @@ def fetch_session(session: str, doi: str | None, stages: list[str], force: bool,
     if not todo:
         return ok, failed
 
+    # require_downloadable=False so that when no deposit serves bytes we still
+    # get one that lists files: _fetch skips everything already matching the
+    # registry, so a raw/ that is complete on disk verifies and KEEPs during an
+    # outage instead of failing. Stages that genuinely need bytes still FAIL,
+    # per stage, with the real download error.
     try:
-        doi, kind, registry, ctx = resolve_deposit(session, doi)
+        doi, kind, registry, ctx = resolve_deposit(session, doi,
+                                                   require_downloadable=False)
     except LookupError as exc:
-        # No deposit serves bytes right now — but the *file list* may still
-        # resolve, and _fetch skips every file that already matches it. So a
-        # raw/ that is already complete on disk verifies and KEEPs during an
-        # outage instead of failing; only stages that genuinely need bytes go
-        # on to FAIL, per stage, with the real download error.
-        try:
-            doi, kind, registry, ctx = resolve_deposit(session, doi,
-                                                       require_downloadable=False)
-            print(f"  NOTE {exc}")
-            print(f"       verifying local files against the file list anyway.")
-        except LookupError:
-            print(f"  FAIL {session}: {exc}")
-            return ok, failed + len(todo)
+        print(f"  FAIL {session}: {exc}")
+        return ok, failed + len(todo)
     print(f"  using doi:{doi} ({kind})")
 
     zip_for = {st: f"{st}.zip" for st in PROCESSED}

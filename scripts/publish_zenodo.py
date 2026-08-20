@@ -51,24 +51,19 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from urllib.parse import quote
 
 import requests
 
-from _publish_common import (RETRYABLE_STATUS, TransientArchiveError,
-                             retrying)
-from _publish_common import (DESCRIPTION_HTML, KEYWORDS, REPO_URL, TITLE_FMT,
-                             Progress, add_common_args, human, load_token, md5,
-                             mirror_hint, plan)
+from _publish_common import (DESCRIPTION_HTML, KEYWORDS, REPO_URL,
+                             RETRYABLE_STATUS, TITLE_FMT, UPLOAD_TIMEOUT,
+                             Progress, TransientArchiveError, add_common_args,
+                             draft_hint, human, load_token, md5, mirror_hint,
+                             plan, report_resume, retrying, run)
 
-_TIMEOUT = 60  # control-plane calls
-# Zenodo throttles uploads hard (~0.15 MB/s measured), and a single socket
-# write can stall for many minutes without the connection being dead — a 300s
-# write timeout aborted a healthy (if glacial) transfer in practice. 30 min
-# still converts a truly dead connection into an exception the resume machinery
-# can act on, which is the only job this timeout has.
-_UPLOAD_TIMEOUT = (30, 1800)
+_TIMEOUT = 60  # control-plane calls; upload PUTs use UPLOAD_TIMEOUT["zenodo"]
 
 # Zenodo and its sandbox are separate sites with separate accounts and separate
 # tokens. Rehearsing on the sandbox is advisable before a multi-GB push. The
@@ -114,6 +109,22 @@ class Zenodo:
         self.session.headers["Authorization"] = f"Bearer {token}"
 
     def _call(self, method: str, path: str, **kw):
+        # Control-plane calls are cheap and idempotent, so they get their own
+        # short retry: a 503 on the final publish would otherwise throw away a
+        # completed multi-hour upload. Creating a deposition is excluded — a
+        # retry there could leave two drafts.
+        create = method == "POST" and path == "/deposit/depositions"
+        attempts = 1 if create else 3
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._request(method, path, **kw)
+            except TransientArchiveError:
+                if attempt == attempts:
+                    raise
+                print(f"       transient error on {method} {path}, retrying")
+                time.sleep(5 * attempt)
+
+    def _request(self, method: str, path: str, **kw):
         r = self.session.request(method, f"{self.base}{path}", timeout=_TIMEOUT, **kw)
         self._raise(r)
         return r.json() if r.content else {}
@@ -160,7 +171,7 @@ class Zenodo:
         body = Progress(path, label)
         try:
             r = self.session.put(f"{bucket}/{quote(name)}", data=body,
-                                 timeout=_UPLOAD_TIMEOUT)
+                                 timeout=UPLOAD_TIMEOUT["zenodo"])
         finally:
             body.close()
             Progress.clear()
@@ -192,13 +203,16 @@ def main() -> int:
                          "creating a new one")
     args = ap.parse_args()
 
+    # Token first: a missing or placeholder token should fail instantly rather
+    # than after plan() has hashed ~9 GB.
+    host, token_file, token_env = HOSTS[args.sandbox]
+    token = None if args.dry_run else load_token(token_file, token_env,
+                                                example=TOKEN_EXAMPLE)
     items = plan(args)
     if items is None:  # --dry-run
         return 0
 
-    host, token_file, token_env = HOSTS[args.sandbox]
-    api = Zenodo(load_token(token_file, token_env, example=TOKEN_EXAMPLE),
-                 args.sandbox)
+    api = Zenodo(token, args.sandbox)
 
     if args.deposition:
         dep = api.get(args.deposition)
@@ -212,12 +226,7 @@ def main() -> int:
     # Hash only files the deposit already names — on a fresh draft that is
     # none of them, not a full pass over 9 GB whose result is discarded.
     todo = [(n, p) for n, p in items if n not in have or have[n] != md5(p)]
-    skipped = len(items) - len(todo)
-    if skipped:
-        print(f"  {skipped} file(s) already uploaded and matching — skipping.")
-    if todo:
-        print(f"  uploading {len(todo)} file(s), "
-              f"{human(sum(p.stat().st_size for _, p in todo))}")
+    report_resume(len(items), todo)
     for i, (name, path) in enumerate(todo, 1):
         label = f"[{i}/{len(todo)}] {name}"
         retrying(lambda: api.upload(bucket, name, path, label=label), label)
@@ -227,10 +236,8 @@ def main() -> int:
     print("  metadata set.")
 
     if not args.publish:
-        print(f"\nDraft ready but NOT published: {host}/uploads/{dep_id}\n"
-              f"Review it in the browser, then either publish there or re-run with:\n"
-              f"    python scripts/publish_zenodo.py --session {args.session} "
-              f"--deposition {dep_id} --publish")
+        print(draft_hint("publish_zenodo.py", args.session,
+                         f"{host}/uploads/{dep_id}", "--deposition", dep_id))
         return 0
 
     rec = api.publish(dep_id)
@@ -240,14 +247,9 @@ def main() -> int:
     print(f"  version DOI: {doi}")
     if concept:
         print(f"  concept DOI: {concept}  (resolves to the latest version)")
-    print(mirror_hint(args.session, args.primary_doi or None, concept or doi))
+    print(mirror_hint(args.session, concept or doi))
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except TransientArchiveError as exc:
-        # Outside an upload loop (a control-plane call) there is no retry
-        # wrapper, so turn it into the same readable exit everything else gets.
-        sys.exit(f"{exc}\n  Transient archive error - re-run to resume.")
+    run(main)

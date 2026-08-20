@@ -46,18 +46,25 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 import requests
 
-from _publish_common import (RETRYABLE_STATUS, TransientArchiveError,
-                             retrying)
-from _publish_common import (DESCRIPTION_HTML, KEYWORDS, REPO_URL, TITLE_FMT,
-                             UPLOAD_TIMEOUT, Progress, add_common_args, human,
-                             load_token, md5, mirror_hint, plan)
+from _publish_common import (DESCRIPTION_HTML, KEYWORDS, REPO_URL,
+                             RETRYABLE_STATUS, TITLE_FMT, UPLOAD_TIMEOUT,
+                             Progress, TransientArchiveError, add_common_args,
+                             draft_hint, human, load_token, md5, mirror_hint,
+                             plan, report_resume, retrying, run)
 
 API = "https://api.figshare.com/v2"
-_TIMEOUT = 60  # control-plane calls; upload PUTs use UPLOAD_TIMEOUT
+_TIMEOUT = 60  # control-plane calls; upload PUTs use UPLOAD_TIMEOUT["figshare"]
+
+# figshare's page_size ceiling. Taking the endpoint default (10) is what left
+# duplicate files in a published mirror, so the listing asks for the maximum —
+# and shouts if a session ever actually reaches it, because there is no Link
+# header or total count to detect truncation any other way.
+_PAGE_MAX = 1000
 
 TOKEN_FILE = ".figshare_token"
 TOKEN_ENV = "FIGSHARE_TOKEN"
@@ -90,6 +97,21 @@ class Figshare:
 
     # -- plumbing ----------------------------------------------------------
     def _call(self, method: str, path: str, **kw):
+        # Control-plane calls are cheap and idempotent, so they get their own
+        # short retry: a 503 on the final publish would otherwise throw away a
+        # completed multi-hour upload. Creating an article is excluded — a retry
+        # there could leave two drafts.
+        attempts = 1 if (method == "POST" and path == "/account/articles") else 3
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._request(method, path, **kw)
+            except TransientArchiveError:
+                if attempt == attempts:
+                    raise
+                print(f"       transient error on {method} {path}, retrying")
+                time.sleep(5 * attempt)
+
+    def _request(self, method: str, path: str, **kw):
         r = self.session.request(method, f"{API}{path}", timeout=_TIMEOUT, **kw)
         self._raise(r)
         # Not every 2xx carries JSON: completing a file upload returns a bare
@@ -129,11 +151,12 @@ class Figshare:
         Looked up rather than hardcoded: the ids are account- and
         portal-dependent, and a wrong one fails only at publish time.
         """
-        for lic in self._call("GET", "/licenses"):
+        licenses = self._call("GET", "/licenses")
+        for lic in licenses:
             if want.lower().replace(" ", "") in lic["name"].lower().replace(" ", ""):
                 return lic["value"]
         sys.exit(f"No license matching {want!r} on this account. Available: "
-                 + ", ".join(l["name"] for l in self._call("GET", "/licenses")))
+                 + ", ".join(l["name"] for l in licenses))
 
     def category_ids(self, want: str) -> list[int]:
         """Selectable category ids matching *want*.
@@ -172,8 +195,15 @@ class Figshare:
         article — leaves duplicates behind. A deposit holding several different
         blobs under one name is worse than one that is simply missing it.
         """
-        return self._call("GET", f"/account/articles/{article_id}/files",
-                          params={"page_size": 1000})
+        files = self._call("GET", f"/account/articles/{article_id}/files",
+                           params={"page_size": _PAGE_MAX})
+        if len(files) == _PAGE_MAX:
+            raise SystemExit(
+                f"figshare returned exactly {_PAGE_MAX} files for article "
+                f"{article_id} — the listing is probably truncated, and a "
+                f"truncated listing is what silently creates duplicate files. "
+                f"Paginate this call before continuing.")
+        return files
 
     def delete_file(self, article_id: int, file_id: int) -> None:
         self._call("DELETE", f"/account/articles/{article_id}/files/{file_id}")
@@ -223,6 +253,12 @@ class Figshare:
         r = requests.get(upload_url, timeout=_TIMEOUT)
         self._raise(r)
         parts = r.json()["parts"]
+        if int(info.get("size") or 0) != path.stat().st_size:
+            raise SystemExit(
+                f"{label}: figshare has this file initiated at "
+                f"{info.get('size')} bytes but the local file is "
+                f"{path.stat().st_size} — delete it and re-send rather than "
+                f"resuming into a stale part layout.")
 
         pending = [p for p in parts if p.get("status") != "COMPLETE"]
         already = sum(p["endOffset"] - p["startOffset"] + 1
@@ -235,11 +271,10 @@ class Figshare:
         try:
             for part in pending:
                 start, end = part["startOffset"], part["endOffset"]
-                body = Progress(path, label, offset=start, limit=end - start + 1,
-                                done=done, total=total)
+                body = Progress(path, label, part=(start, end), done=done)
                 try:
                     r = requests.put(f"{upload_url}/{part['partNo']}", data=body,
-                                     timeout=UPLOAD_TIMEOUT)
+                                     timeout=UPLOAD_TIMEOUT["figshare"])
                     done = body.done
                 finally:
                     body.close()
@@ -265,11 +300,14 @@ def main() -> int:
     ap.add_argument("--license", default="CC BY 4.0", help="license name")
     args = ap.parse_args()
 
+    # Token first: a missing or placeholder token should fail instantly rather
+    # than after plan() has hashed ~9 GB.
+    token = None if args.dry_run else load_token(TOKEN_FILE, TOKEN_ENV)
     items = plan(args)
     if items is None:  # --dry-run
         return 0
 
-    api = Figshare(load_token(TOKEN_FILE, TOKEN_ENV))
+    api = Figshare(token)
     license_id = api.license_id(args.license)
     categories = api.category_ids(args.category)
     if not categories:
@@ -297,12 +335,7 @@ def main() -> int:
                 and existing.get("computed_md5") == md5(path):
             continue
         todo.append((name, path, existing))
-    skipped = len(items) - len(todo)
-    if skipped:
-        print(f"  {skipped} file(s) already stored and matching — skipping.")
-    if todo:
-        print(f"  uploading {len(todo)} file(s), "
-              f"{human(sum(p.stat().st_size for _, p, _ in todo))}")
+    report_resume(len(items), todo)
 
     for i, (name, path, existing) in enumerate(todo, 1):
         label = f"[{i}/{len(todo)}] {name}"
@@ -312,11 +345,9 @@ def main() -> int:
         print(f"       {label} done ({human(path.stat().st_size)})")
 
     if not args.publish:
-        print(f"\nDraft ready but NOT published:\n"
-              f"    https://figshare.com/account/articles/{article_id}\n"
-              f"Review it, then publish with:\n"
-              f"    python scripts/publish_figshare.py --session {args.session} "
-              f"--article {article_id} --publish")
+        print(draft_hint("publish_figshare.py", args.session,
+                         f"https://figshare.com/account/articles/{article_id}",
+                         "--article", article_id))
         return 0
 
     api.publish(article_id)
@@ -324,14 +355,9 @@ def main() -> int:
     doi = pub.get("doi", "")
     print(f"\nPublished: {pub.get('url_public_html', '')}")
     print(f"  DOI: {doi}")
-    print(mirror_hint(args.session, args.primary_doi or None, doi))
+    print(mirror_hint(args.session, doi))
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except TransientArchiveError as exc:
-        # Outside an upload loop (a control-plane call) there is no retry
-        # wrapper, so turn it into the same readable exit everything else gets.
-        sys.exit(f"{exc}\n  Transient archive error - re-run to resume.")
+    run(main)

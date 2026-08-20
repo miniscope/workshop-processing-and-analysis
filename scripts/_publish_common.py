@@ -22,20 +22,27 @@ import time
 import zipfile
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-DATA_ROOT = REPO_ROOT / "data" / "sessions"
-CACHE = REPO_ROOT / "data" / ".cache"
-STAGING = CACHE / "_publish_staging"
+# Import the reader's own definitions rather than re-deriving them. The cache
+# layout has already changed once (get_data._migrate_flat_cache exists for that
+# reason); a second copy of it here would not error on the next change, it would
+# silently miss the cache and re-zip the stage dir, publishing bundles whose
+# bytes differ from the primary's. Same for PROCESSED: a stage listed here but
+# not there gets downloaded into raw/ as if it were an acquisition file.
+# The import direction is deliberate and one-way — get_data is stdlib-only and
+# participant-facing, so it must never import this module.
+from get_data import CACHE, DATA_ROOT, PROCESSED, REPO_ROOT, _bundle_path, _human
 
-PROCESSED = ["minian_out", "deconv_out", "eztrack_out"]
+STAGING = CACHE / "_publish_staging"
 
 _CHUNK = 1 << 20  # 1 MiB
 
-# (connect, read) for the upload PUTs. requests' timeout is per socket
-# operation, not a total cap, so this cannot abort a legitimately long upload —
-# it only turns a silently dead connection into an exception the resume
-# machinery can act on, instead of a hang someone has to notice and kill.
-UPLOAD_TIMEOUT = (30, 300)
+# (connect, read) for the upload PUTs. The read half only fires on a *stall*,
+# so its only job is turning a silently dead socket into an exception the resume
+# machinery can act on. It is sized per archive because 300s turned out to abort
+# healthy-but-glacial Zenodo transfers: at ~0.15 MB/s a single socket write can
+# legitimately go quiet for minutes. Generous is nearly free — the cost of a high
+# value is only a later notice on a genuinely dead connection.
+UPLOAD_TIMEOUT = {"figshare": (30, 300), "zenodo": (30, 1800)}
 
 # Token files ship as templates with this marker; sending it would come back as
 # a bare 401 and read like a bad token rather than an unfilled file.
@@ -64,12 +71,7 @@ KEYWORDS = ["miniscope", "calcium imaging", "place cells", "hippocampus",
 REPO_URL = "https://github.com/miniscope/workshop-processing-and-analysis"
 
 
-def human(n: float) -> str:
-    """Bytes as a short human string (e.g. ``9.4 GB``)."""
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if n < 1024 or unit == "TB":
-            return f"{n:.1f} {unit}" if unit != "B" else f"{int(n)} B"
-        n /= 1024
+human = _human  # same formatting as the download side, by construction
 
 
 def _digest(path: Path, alg: str) -> str:
@@ -98,8 +100,21 @@ def md5(path: Path) -> str:
     return _md5_cache[key]
 
 
+_sha_cache: dict[tuple[str, int, int], str] = {}
+
+
 def sha256(path: Path) -> str:
-    return _digest(path, "sha256")
+    """sha256 of *path*, memoized like :func:`md5`.
+
+    The manifest check reads all ~9 GB, and a supervisor restart re-pays it
+    before a single byte moves; within one process the memo makes the repeat
+    free. Keyed on (path, size, mtime_ns) so a rebuilt bundle invalidates.
+    """
+    st = path.stat()
+    key = (str(path), st.st_size, st.st_mtime_ns)
+    if key not in _sha_cache:
+        _sha_cache[key] = _digest(path, "sha256")
+    return _sha_cache[key]
 
 
 def load_token(filename: str, envvar: str, example: str | None = None) -> str:
@@ -153,7 +168,7 @@ def bundle_for(session: str, stage: str) -> Path | None:
     because Dataverse silently unpacks any zip you upload; archives that store
     what you give them need no second wrapper, or readers get a zip in a zip.
     """
-    cached = CACHE / session / f"{stage}.zip"
+    cached = _bundle_path(session, stage)
     if cached.is_file():
         return cached
 
@@ -310,14 +325,39 @@ def plan(args: argparse.Namespace) -> list[tuple[str, Path]] | None:
     return items
 
 
-def mirror_hint(session: str, primary_doi: str | None, new_doi: str) -> str:
-    """The post-publish "paste this into SESSIONS" instructions."""
-    return (f"\nNext: add it as a mirror in scripts/get_data.py so fetches fail "
-            f"over automatically:\n"
-            f'    SESSIONS["{session}"] = [\n'
-            f'        "{primary_doi or "<primary DOI>"}",\n'
+def report_resume(n_items: int, todo: list) -> None:
+    """Print what the resume filter skipped and what is left to send."""
+    skipped = n_items - len(todo)
+    if skipped:
+        print(f"  {skipped} file(s) already stored and matching — skipping.")
+    if todo:
+        paths = [t[1] for t in todo]
+        print(f"  uploading {len(todo)} file(s), "
+              f"{human(sum(p.stat().st_size for p in paths))}")
+
+
+def draft_hint(script: str, session: str, url: str, flag: str, ident) -> str:
+    """The "draft is ready, publish it deliberately" instructions."""
+    return (f"\nDraft ready but NOT published:\n    {url}\n"
+            f"Review it, then publish with:\n"
+            f"    python scripts/{script} --session {session} "
+            f"{flag} {ident} --publish")
+
+
+def mirror_hint(session: str, new_doi: str) -> str:
+    """The post-publish "add this to SESSIONS" instructions.
+
+    Deliberately does *not* print a full list literal. It used to, with the
+    primary first — which, followed verbatim while publishing a second mirror,
+    would have silently dropped the first one. A helper that generates code must
+    not restate an ordering policy that lives in another file.
+    """
+    return (f"\nNext: add this DOI to SESSIONS[{session!r}] in "
+            f"scripts/get_data.py:\n"
             f'        "{new_doi or "<mirror DOI>"}",\n'
-            f"    ]")
+            f"  Keep the list ordered by measured download throughput, fastest\n"
+            f"  first — see the comment above SESSIONS. Then fetches fail over\n"
+            f"  automatically.")
 
 
 class TransientArchiveError(RuntimeError):
@@ -370,6 +410,19 @@ def retrying(fn, label: str, attempts: int = 7) -> None:
             time.sleep(wait)
 
 
+def run(main) -> None:
+    """Run *main*, turning a stray transient error into a readable exit.
+
+    Control-plane calls outside an upload loop have no retry wrapper around
+    them, so without this a 503 on (say) the final publish surfaces as a
+    traceback rather than the "re-run to resume" every other failure gives.
+    """
+    try:
+        sys.exit(main())
+    except TransientArchiveError as exc:
+        sys.exit(f"{exc}\n  Transient archive error - re-run to resume.")
+
+
 class Progress:
     """File wrapper that draws a single-line progress meter as it is read.
 
@@ -381,25 +434,29 @@ class Progress:
     ``tell()`` from ``len()`` when both exist, which would silently understate
     Content-Length for every byte-range part after the first.
 
-    *limit* caps how many bytes this wrapper will yield, for archives that upload
-    in explicit byte-range parts.
+    *part* is an inclusive ``(start, end)`` byte range, for archives that upload
+    in explicit parts; omit it to stream the whole file. *done* seeds the
+    whole-file counter so a part-wise upload still shows overall progress.
 
     Redraws are throttled (the transport reads in ~16 KiB chunks — unthrottled,
     a 9 GB push is ~600k writes), and skipped entirely when stdout is not a tty,
     where ``\\r`` cannot overwrite and would only bloat the log.
     """
 
-    def __init__(self, path: Path, label: str, offset: int = 0,
-                 limit: int | None = None, done: int = 0, total: int | None = None):
+    def __init__(self, path: Path, label: str, part: tuple[int, int] | None = None,
+                 done: int = 0):
         self._f = open(path, "rb")
-        if offset:
-            self._f.seek(offset)
         size = path.stat().st_size
-        self._remaining = limit if limit is not None else size - offset
+        if part is None:
+            self._remaining = size
+        else:
+            start, end = part  # inclusive byte range, as the archive states it
+            self._f.seek(start)
+            self._remaining = end - start + 1
         self._len = self._remaining
         # Whole-file counters, so a part-wise upload still shows overall progress.
         self._done = done
-        self._total = total if total is not None else size
+        self._total = size
         self._label = label
         self._tty = sys.stdout.isatty()
         self._last_draw = 0.0
