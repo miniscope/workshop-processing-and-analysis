@@ -1,0 +1,25 @@
+# Zenodo API token for scripts/publish_zenodo.py
+#
+# Copy this file to `.zenodo_token` and replace the placeholder line at the
+# bottom with your token. Lines starting with # are ignored, so these notes can
+# stay in the file.
+#
+# Get a token at:
+#     https://zenodo.org/account/settings/applications/tokens/new/
+#
+# Scopes needed:
+#     deposit:write      create a deposit and upload files into it
+#     deposit:actions    publish it (this is what mints the DOI)
+#
+# Zenodo shows the token exactly once, at creation time. If you lose it, make a
+# new one rather than hunting for it.
+#
+# `.zenodo_token` is gitignored and must stay that way — a leaked token can
+# rewrite or delete the lab's deposits. Keep it readable only by you:
+#     chmod 600 .zenodo_token
+#
+# For a dry run against https://sandbox.zenodo.org — a separate site, with its
+# own separate account and token — put that token in `.zenodo_token.sandbox`
+# and pass --sandbox. Recommended before a 9 GB upload to the real thing.
+
+PASTE_YOUR_ZENODO_TOKEN_HERE

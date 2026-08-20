@@ -31,14 +31,29 @@ over email — not in a time-boxed room where one stuck laptop blocks everyone.
       folder, so they extract straight into the stage dir). Done — uploaded to the
       `prerecorded` deposit (double-zipped so Dataverse keeps each `*_out.zip`
       intact) and verified to download + extract via `get_data.py --what processed`.
-- [ ] **Archive downloads are currently broken.** Every file in the `prerecorded`
-      deposit returns `404 Failed to locate and/or open physical file` from
-      `dataverse.ucla.edu/api/access/datafile/<id>` (all 33 files, all three
-      dataset versions; the whole-dataset zip 500s). The metadata API is fine —
-      file list and checksums resolve — so this is storage-side, not our code.
-      **File a ticket with UCLA Dataverse support and re-test before the
-      workshop**; until it's fixed, `get_data.py` cannot fetch anything from
-      that DOI and participants depend entirely on data they already pulled.
+- [x] **The UCLA Dataverse storage outage is resolved.** For a period every file
+      in the deposit returned `404 Failed to locate and/or open physical file`
+      from `dataverse.ucla.edu/api/access/datafile/<id>` — instance-wide, not
+      just our deposit, with metadata resolving fine throughout. All 33 files
+      now download and it measures ~9.2 MB/s, the fastest of our archives, so it
+      is first in `SESSIONS` again. `get_data.py` now byte-probes every
+      candidate before committing to it, so a recurrence fails over to the
+      mirror instead of dying on the first file.
+- [x] **figshare mirror published:** `10.6084/m9.figshare.33289752.v1`
+      (article 33289752), 33 files / 8.9 GiB, every file MD5-verified against
+      the local copies, which were themselves checked against the deposit's
+      `MANIFEST.txt`. Second in `SESSIONS` at ~6.9 MB/s. Published from a
+      personal figshare account (`dbaharoni@gmail.com`) — **worth moving to a
+      lab-owned account** if this is meant to outlive the workshop.
+- [x] **Zenodo was evaluated and dropped.** Measured ~0.6 MB/s down and
+      ~0.15 MB/s up from here — 4 hours per participant for the 8.9 GB session,
+      against 22 minutes on figshare and 16 on UCLA Dataverse. A mirror nobody
+      can practically download from is not a backup, so the in-progress draft
+      was deleted unpublished (no DOI was ever minted, nothing to cite).
+      `scripts/publish_zenodo.py` is kept and working should that calculus ever
+      change — Zenodo's CERN-backed preservation guarantees are genuinely
+      stronger than a commercial host's, and it needs only a token and a DOI to
+      slot in at the *end* of `SESSIONS`.
 - [x] **Recovery lever for a participant who breaks a stage:**
       `python scripts/get_data.py --restore --what minian_out` wipes the stage
       and re-extracts the published bundle from `data/.cache/` — instant and

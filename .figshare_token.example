@@ -1,0 +1,19 @@
+# figshare API token for scripts/publish_figshare.py
+#
+# Copy this file to `.figshare_token` and replace the placeholder line at the
+# bottom with your token. Lines starting with # are ignored, so these notes can
+# stay in the file.
+#
+# Get a personal token at:
+#     https://figshare.com/account/applications
+#     -> "Personal tokens" -> "Create personal token"
+#
+# A personal token carries your full account permissions — it can create,
+# modify, and delete articles. There are no narrower scopes to pick from, which
+# is exactly why this file must never be committed.
+#
+# `.figshare_token` is gitignored and must stay that way. Keep it readable only
+# by you:
+#     chmod 600 .figshare_token
+
+PASTE_YOUR_FIGSHARE_TOKEN_HERE

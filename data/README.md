@@ -88,6 +88,74 @@ nothing downloads as a zip you have to open — each stage extracts straight int
 `data/.cache/<session>/` — that's what avoids a re-download, and what makes
 [`--restore`](#restoring-a-stage-you-broke) below work offline.
 
+## Mirrors and archive outages
+
+A session can list **more than one deposit**, and `get_data.py` picks between
+them automatically:
+
+```python
+SESSIONS = {
+    "prerecorded": [
+        "10.25346/S6SGHPCZ",                # UCLA Dataverse — ~9.2 MB/s
+        "10.6084/m9.figshare.33289752.v1",  # figshare mirror — ~6.9 MB/s
+    ],
+}
+```
+
+Ordered by **measured download throughput, fastest first** — ordering is the
+only preference mechanism there is (see below). figshare's DOI is version-pinned
+(`.v1`) so a future version cannot silently change what participants receive.
+
+They're tried in order, and the test is deliberately stricter than "does the DOI
+resolve". An archive can serve perfect metadata — file names, sizes, checksums,
+all correct — while its storage layer fails every single download. That is
+exactly how the UCLA archive went down, and a naive "did the DOI resolve" check
+would pick the broken candidate every time and only fail at the first file. So
+`get_data.py` asks for the first kilobyte of one file and reads a byte of it
+before committing, and falls through to the next mirror if that fails. **Every
+archive kind is probed**, including figshare and Zenodo — an embargoed or
+unpublished record there resolves and lists files perfectly too.
+
+**Selection checks reachability, never speed.** A candidate is accepted if its
+DOI resolves, it lists files, and (for Dataverse) it serves bytes. Nothing
+measures throughput, so a mirror that is alive but glacial passes every check
+and gets used for the whole run. That is why the list is ordered by measured
+speed rather than by which archive is "primary" — ordering *is* the preference
+mechanism. Two known gaps, both deliberate for now:
+
+- **No speed-aware failover.** Zenodo at ~0.6 MB/s would be selected happily if
+  it were listed first. Handled by putting it last.
+- **No mid-download failover.** Once a deposit is chosen it is used for the rest
+  of the run; if its downloads start failing partway, the fetch fails rather
+  than falling through to the next mirror.
+
+Neither bites while the fastest healthy mirror is listed first. If they ever
+need fixing, mid-download failover is the more valuable of the two — it covers
+the slow case *and* the dies-halfway case without needing a throughput
+threshold anyone has to guess at.
+
+Two consequences worth knowing:
+
+- **Data you already have is never blocked by an outage.** Local-first is
+  settled before any archive is contacted, so `KEEP` still works with every
+  mirror down. Same for `--restore`, which falls back to the cached bundle.
+- **A total failure tells you why**, per mirror — "resolves, but its files are
+  not downloadable" reads very differently from "unreadable", and points at the
+  archive rather than at your setup.
+
+Publishing a mirror is a maintainer job. Two publishers upload a session in
+exactly this layout and print the DOI to paste in:
+
+- [`scripts/publish_figshare.py`](../scripts/publish_figshare.py) — **use this
+  for the workshop mirror**: measured ~6.6 MB/s downloads against Zenodo's
+  ~0.6 MB/s, i.e. ~22 minutes for the full session instead of ~4 hours.
+  Token in `.figshare_token` (see `.figshare_token.example`).
+- [`scripts/publish_zenodo.py`](../scripts/publish_zenodo.py) — works, but
+  Zenodo measured ~0.6 MB/s here (~4 hours for the session, against ~22 minutes
+  on figshare), so it is **not** currently used. Kept because its CERN-backed
+  preservation guarantees are stronger than a commercial host's, if that ever
+  outweighs the speed. Token in `.zenodo_token`.
+
 ## Restoring a stage you broke
 
 Each processed stage is published as a zip, and the first `get_data.py` run
