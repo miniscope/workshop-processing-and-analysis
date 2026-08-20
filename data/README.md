@@ -150,9 +150,11 @@ exactly this layout and print the DOI to paste in:
   for the workshop mirror**: measured ~6.6 MB/s downloads against Zenodo's
   ~0.6 MB/s, i.e. ~22 minutes for the full session instead of ~4 hours.
   Token in `.figshare_token` (see `.figshare_token.example`).
-- [`scripts/publish_zenodo.py`](../scripts/publish_zenodo.py) — slow, but
-  CERN-backed: worth keeping as the long-term preservation copy. Token in
-  `.zenodo_token` (see `.zenodo_token.example`).
+- [`scripts/publish_zenodo.py`](../scripts/publish_zenodo.py) — works, but
+  Zenodo measured ~0.6 MB/s here (~4 hours for the session, against ~22 minutes
+  on figshare), so it is **not** currently used. Kept because its CERN-backed
+  preservation guarantees are stronger than a commercial host's, if that ever
+  outweighs the speed. Token in `.zenodo_token`.
 
 ## Restoring a stage you broke
 

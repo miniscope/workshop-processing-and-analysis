@@ -141,8 +141,9 @@ SESSIONS: dict[str, list[str]] = {
     "prerecorded": [
         "10.25346/S6SGHPCZ",                # UCLA Dataverse — ~9.2 MB/s measured
         "10.6084/m9.figshare.33289752.v1",  # figshare mirror — ~6.9 MB/s measured
-        # "10.5281/zenodo.XXXXXXX",         # Zenodo — ~0.6 MB/s; preservation
-                                            #   copy, deliberately last.
+        # Zenodo was measured at ~0.6 MB/s and dropped — see ORGANIZER.md.
+        # scripts/publish_zenodo.py still works if it is ever wanted; its DOI
+        # would belong here, at the end, since the list is ordered by speed.
     ],
     "live": [],                             # add its DOI here, or pass --doi
 }

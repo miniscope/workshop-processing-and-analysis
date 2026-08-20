@@ -45,14 +45,15 @@ over email — not in a time-boxed room where one stuck laptop blocks everyone.
       `MANIFEST.txt`. Second in `SESSIONS` at ~6.9 MB/s. Published from a
       personal figshare account (`dbaharoni@gmail.com`) — **worth moving to a
       lab-owned account** if this is meant to outlive the workshop.
-- [ ] **Zenodo preservation copy** — draft deposition 22015414, upload in
-      progress. Zenodo measures ~0.6 MB/s down and ~0.15 MB/s up, so it is
-      deliberately **last** in `SESSIONS` and is a preservation copy rather than
-      a workshop download path. Resume with
-      `python scripts/publish_zenodo.py --no-verify --deposition 22015414`.
-      Publish it, then add the DOI to `SESSIONS["prerecorded"]` **at the end of
-      the list** — the list is ordered by measured throughput, not by
-      provenance.
+- [x] **Zenodo was evaluated and dropped.** Measured ~0.6 MB/s down and
+      ~0.15 MB/s up from here — 4 hours per participant for the 8.9 GB session,
+      against 22 minutes on figshare and 16 on UCLA Dataverse. A mirror nobody
+      can practically download from is not a backup, so the in-progress draft
+      was deleted unpublished (no DOI was ever minted, nothing to cite).
+      `scripts/publish_zenodo.py` is kept and working should that calculus ever
+      change — Zenodo's CERN-backed preservation guarantees are genuinely
+      stronger than a commercial host's, and it needs only a token and a DOI to
+      slot in at the *end* of `SESSIONS`.
 - [x] **Recovery lever for a participant who breaks a stage:**
       `python scripts/get_data.py --restore --what minian_out` wipes the stage
       and re-extracts the published bundle from `data/.cache/` — instant and
