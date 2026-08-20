@@ -96,22 +96,43 @@ them automatically:
 ```python
 SESSIONS = {
     "prerecorded": [
-        "10.25346/S6SGHPCZ",           # UCLA Dataverse — primary
-        "10.6084/m9.figshare.XXXXXXX", # figshare mirror
+        "10.25346/S6SGHPCZ",                # UCLA Dataverse — ~9.2 MB/s
+        "10.6084/m9.figshare.33289752.v1",  # figshare mirror — ~6.9 MB/s
     ],
 }
 ```
 
-They're tried in order, and for Dataverse candidates the test is deliberately
-stricter than "does the DOI resolve". A Dataverse can serve perfect metadata —
-file names, sizes, checksums, all correct — while its storage layer fails every
-single download. That is exactly how the UCLA archive went down, and a naive
-"did the DOI resolve" check would pick the broken primary every time and only
-fail at the first file. So `get_data.py` pulls the first kilobyte of the
-deposit's smallest file before committing to it, and falls through to the next
-mirror if that fails. (pooch-read archives — Zenodo, figshare — serve files
-from the record itself, so they're taken on trust once they resolve and
-hash-verified as they download.)
+Ordered by **measured download throughput, fastest first** — ordering is the
+only preference mechanism there is (see below). figshare's DOI is version-pinned
+(`.v1`) so a future version cannot silently change what participants receive.
+
+They're tried in order, and the test is deliberately stricter than "does the DOI
+resolve". An archive can serve perfect metadata — file names, sizes, checksums,
+all correct — while its storage layer fails every single download. That is
+exactly how the UCLA archive went down, and a naive "did the DOI resolve" check
+would pick the broken candidate every time and only fail at the first file. So
+`get_data.py` asks for the first kilobyte of one file and reads a byte of it
+before committing, and falls through to the next mirror if that fails. **Every
+archive kind is probed**, including figshare and Zenodo — an embargoed or
+unpublished record there resolves and lists files perfectly too.
+
+**Selection checks reachability, never speed.** A candidate is accepted if its
+DOI resolves, it lists files, and (for Dataverse) it serves bytes. Nothing
+measures throughput, so a mirror that is alive but glacial passes every check
+and gets used for the whole run. That is why the list is ordered by measured
+speed rather than by which archive is "primary" — ordering *is* the preference
+mechanism. Two known gaps, both deliberate for now:
+
+- **No speed-aware failover.** Zenodo at ~0.6 MB/s would be selected happily if
+  it were listed first. Handled by putting it last.
+- **No mid-download failover.** Once a deposit is chosen it is used for the rest
+  of the run; if its downloads start failing partway, the fetch fails rather
+  than falling through to the next mirror.
+
+Neither bites while the fastest healthy mirror is listed first. If they ever
+need fixing, mid-download failover is the more valuable of the two — it covers
+the slow case *and* the dies-halfway case without needing a throughput
+threshold anyone has to guess at.
 
 Two consequences worth knowing:
 
