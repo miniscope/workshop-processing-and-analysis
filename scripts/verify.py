@@ -68,10 +68,17 @@ def _nonempty_dir(p: Path) -> bool:
 
 def check_python() -> None:
     v = sys.version_info
-    ok = (3, 11) <= (v.major, v.minor) <= (3, 13)
-    label = f"Python {v.major}.{v.minor}.{v.micro} (need 3.11-3.13)"
-    record("PASS" if ok else "FAIL", label,
-            "" if ok else "Install Python 3.11-3.13 (3.12 recommended) - see INSTALL.md Step 0.")
+    # 3.12 exactly. requirements.lock is boxed in from both sides: scipy 1.18
+    # needs >=3.12, while ecos 2.0.14 (pulled in by Minian) publishes no wheel
+    # past cp312 and would have to compile from C source on anything newer.
+    ok = (v.major, v.minor) == (3, 12)
+    label = f"Python {v.major}.{v.minor}.{v.micro} (need 3.12)"
+    hint = ""
+    if not ok:
+        hint = ("Install Python 3.12 and rebuild the venv - see INSTALL.md Step 0. "
+                "Newer versions fail partway through the install trying to compile "
+                "ecos from source; older ones fail to resolve scipy.")
+    record("PASS" if ok else "FAIL", label, hint)
 
 
 def check_venv() -> None:
