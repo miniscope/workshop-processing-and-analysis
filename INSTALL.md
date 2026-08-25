@@ -17,7 +17,7 @@ venv with no conflicts.
 
 ## Step 0 — Install the prerequisites
 
-You need three things that pip cannot install for you: **Python**, **git**, and
+You need three things that pip cannot install for you: **Python 3.12**, **git**, and
 **ffmpeg**. (pip and `venv` come bundled with Python.)
 
 > **macOS — install Homebrew first.** Every `brew` command below needs it, and a
@@ -39,18 +39,36 @@ You need three things that pip cannot install for you: **Python**, **git**, and
 > your PATH — run those two commands, then **open a new terminal** so `brew` is
 > found.
 
-### Python 3.11–3.13
+### Python 3.12
 
-CaMAP requires Python in this range; 3.12 is recommended. **3.14 (the current
-newest) and 3.10-or-older will NOT work** — grab 3.12 specifically, not "the
-latest."
+**Install Python 3.12 specifically — not "the latest", and not 3.11 or 3.13.**
+`requirements.lock` installs on 3.12 and no other version. This is the single
+most common install failure, so it is worth checking twice.
 
-> **Symptom of the wrong version:** if `pip install` ends with
-> `No matching distribution found for camap[notebook]` and a line like
-> `Ignored the following versions that require a different python version`,
-> your Python is outside 3.11–3.13 (almost always 3.14 too new, or 3.10 too
-> old). Check with `python --version` and rebuild the venv with 3.12 (below).
-> `scripts/verify.py` flags this up front.
+Three separate pins in the lock box it in from both sides:
+
+| Package | Constraint | Effect |
+|---|---|---|
+| `scipy==1.18.0` | `requires-python >=3.12` | rules out 3.11 and older |
+| `ecos==2.0.14` (via Minian) | no wheels past cp312 | 3.13+ tries to compile C source |
+| `camap` | `>=3.11,<3.14` | rules out 3.14 |
+
+> **Symptom of the wrong version — 3.13 or newer.** pip gets partway through,
+> then fails while "Preparing metadata" or "Building wheel" for `ecos` (or, on
+> older lockfiles, `calab`). Because no wheel matches your interpreter, pip
+> falls back to the source archive and tries to *compile* it, which needs a C
+> or Rust toolchain you almost certainly don't have. On managed or corporate
+> machines this often also trips endpoint security — an Artemis/Trojan alert
+> naming a Rust or LLVM file is this, not real malware. Nothing is wrong with
+> your machine and there is nothing for IT to fix: rebuild the venv on 3.12.
+
+> **Symptom of the wrong version — 3.11 or older.** `pip install` ends with
+> `No matching distribution found`, plus a line like `Ignored the following
+> versions that require a different python version`.
+
+Either way: check with `python --version` and rebuild the venv with 3.12
+(below). `scripts/verify.py` flags a wrong interpreter up front, before you
+spend ten minutes on an install that cannot succeed.
 
 - **Windows:** `winget install Python.Python.3.12`
   (or download from [python.org](https://www.python.org/downloads/) and **check
@@ -66,7 +84,7 @@ python --version      # Windows: if this fails, use:  py --version
 python -m pip --version
 ```
 
-You should see `Python 3.1x.y`. On Windows, prefer the `py` launcher
+You should see `Python 3.12.y`. On Windows, prefer the `py` launcher
 (`py -3.12 ...`); if typing `python` opens the Microsoft Store, that's the
 "App execution alias" — turn it off in Settings → Apps → Advanced app settings →
 App execution aliases, or just use `py`.
@@ -116,7 +134,7 @@ Run **every** later command from inside this folder. To confirm you're in it:
 ## Step 2 — Create the environment and install
 
 ```bash
-# create the virtual environment — name the 3.11–3.13 interpreter EXPLICITLY
+# create the virtual environment — name the 3.12 interpreter EXPLICITLY
 # (the Python you create it with becomes the venv's Python permanently)
 py -3.12 -m venv .venv         # Windows  (the 'py' launcher selects the version)
 python3.12 -m venv .venv       # macOS/Linux
@@ -125,8 +143,8 @@ python3.12 -m venv .venv       # macOS/Linux
 .venv\Scripts\Activate.ps1     # Windows PowerShell  (cmd: .venv\Scripts\activate.bat)
 source .venv/bin/activate      # macOS/Linux
 
-# confirm the venv is 3.11–3.13 BEFORE installing (this is the #1 install failure)
-python --version               # must say 3.11.x, 3.12.x, or 3.13.x
+# confirm the venv is 3.12 BEFORE installing (this is the #1 install failure)
+python --version               # must say 3.12.x — no other version will install
 
 # install everything (this is a large scientific stack — expect ~5-10 min)
 python -m pip install --upgrade pip
@@ -143,7 +161,7 @@ python -m pip install -r requirements.lock         # pinned, reproducible (recom
 > `camap[notebook]` install error. The version you build the venv with is the one
 > it keeps — so name it explicitly rather than relying on bare `python`:
 > - **List what you have** — Windows: `py --list`; macOS/Linux: `ls /usr/bin/python3* /usr/local/bin/python3* 2>/dev/null` (or `which -a python3.12`).
-> - **Build the venv with a 3.11–3.13 one** — `py -3.12 -m venv .venv` (Windows) /
+> - **Build the venv with the 3.12 one** — `py -3.12 -m venv .venv` (Windows) /
 >   `python3.12 -m venv .venv` (macOS/Linux). If 3.12 isn't listed, install it
 >   (Step 0) first.
 > - **If you already made the venv with the wrong Python**, delete and recreate it:
